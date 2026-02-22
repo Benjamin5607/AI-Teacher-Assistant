@@ -5,10 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Teacher Assistant</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src='https://unpkg.com/tesseract.js@v5.0.2/dist/tesseract.min.js'></script>
-    <style>
+    
+    <script src='https://unpkg.com/tesseract.js@5.0.2/dist/tesseract.min.js'></script> <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script> <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.21/mammoth.browser.min.js"></script> <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script> <style>
         .correct { background-color: #10b981 !important; color: white; border-color: #10b981; }
         .wrong { background-color: #ef4444 !important; color: white; border-color: #ef4444; }
+        .tab-btn.active { background-color: #059669; color: white; border-color: #059669; }
     </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen">
@@ -25,96 +26,208 @@
             </div>
         </details>
 
-        <section class="bg-slate-800 p-6 rounded-2xl shadow-xl border border-slate-700">
-            <label class="block cursor-pointer group">
-                <div class="bg-emerald-600 group-hover:bg-emerald-500 p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg">
-                    <span>📸 1. 교재 사진 찍기</span>
+        <section class="bg-slate-800 rounded-2xl shadow-xl border border-slate-700 overflow-hidden">
+            <div class="flex border-b border-slate-700 text-sm">
+                <button onclick="switchTab('text')" id="tab-text" class="tab-btn active flex-1 py-3 text-center text-slate-400 hover:text-white transition">📝 텍스트</button>
+                <button onclick="switchTab('file')" id="tab-file" class="tab-btn flex-1 py-3 text-center text-slate-400 hover:text-white transition">📁 파일/사진</button>
+            </div>
+            
+            <div class="p-6">
+                <div id="input-text" class="block">
+                    <textarea id="textContent" rows="4" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-sm text-slate-300 focus:outline-none focus:border-emerald-500" placeholder="공부할 내용을 복사해서 붙여넣으세요..."></textarea>
+                    <button onclick="processInput('text')" class="w-full mt-3 bg-emerald-600 hover:bg-emerald-500 p-3 rounded-xl font-bold transition-all shadow-lg">분석 시작하기</button>
                 </div>
-                <input type="file" id="imageInput" accept="image/*" capture="environment" class="hidden">
-            </label>
-            <div id="status" class="text-center text-xs mt-3 text-emerald-400 font-medium font-bold">교재 사진을 찍어주세요!</div>
+
+                <div id="input-file" class="hidden space-y-4">
+                    <label class="block cursor-pointer group">
+                        <div class="bg-slate-900 border border-dashed border-slate-500 group-hover:border-emerald-500 p-6 rounded-xl text-center transition-all">
+                            <span class="block text-2xl mb-2">📸 / 📄</span>
+                            <span class="text-sm text-slate-400 group-hover:text-emerald-400">사진 촬영 또는 파일 업로드<br>(PDF, Word, Excel, CSV 등)</span>
+                        </div>
+                        <input type="file" id="fileInput" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.json" capture="environment" class="hidden">
+                    </label>
+                </div>
+            </div>
         </section>
 
-        <details class="bg-slate-800 rounded-xl border border-slate-700" open>
-            <summary class="p-3 text-xs text-slate-500 cursor-pointer">📝 2. 추출된 텍스트 확인 및 퀴즈 생성</summary>
-            <div class="p-4 space-y-4">
-                <textarea id="rawContent" rows="4" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-sm text-slate-300 focus:outline-none focus:border-emerald-500" placeholder="추출된 글자가 나타납니다. 오타가 있다면 살짝 수정해주세요!"></textarea>
-                <button onclick="generateQuiz()" id="genBtn" class="w-full bg-blue-600 hover:bg-blue-500 p-4 rounded-xl font-bold transition-all disabled:opacity-50 text-white shadow-lg">
-                    🚀 3. 실전 어학 10문제 출제하기
-                </button>
-            </div>
-        </details>
+        <section id="analysisSection" class="hidden bg-slate-800 p-6 rounded-2xl shadow-xl border border-emerald-500/50 relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 to-blue-500"></div>
+            <h2 class="text-sm font-bold text-emerald-400 mb-2">🤖 AI가 파악한 학습 내용</h2>
+            <div id="aiSummary" class="text-sm text-slate-300 leading-relaxed mb-4 bg-slate-900 p-4 rounded-lg">분석 대기 중...</div>
+            
+            <button onclick="generateQuiz()" id="genBtn" class="w-full bg-blue-600 hover:bg-blue-500 p-4 rounded-xl font-bold transition-all disabled:opacity-50 text-white shadow-lg">
+                🚀 실전 퀴즈 10문제 출제하기
+            </button>
+        </section>
+
+        <div id="loadingStatus" class="hidden text-center text-sm font-bold text-yellow-400 animate-pulse">처리 중입니다... 잠시만 기다려주세요!</div>
 
         <div id="quizContainer" class="space-y-6 pb-10"></div>
     </div>
 
     <script>
-        const imageInput = document.getElementById('imageInput');
-        const status = document.getElementById('status');
-        const rawContent = document.getElementById('rawContent');
+        // PDF.js 워커 세팅
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+        // UI 요소
+        const fileInput = document.getElementById('fileInput');
+        const textContent = document.getElementById('textContent');
+        const analysisSection = document.getElementById('analysisSection');
+        const aiSummary = document.getElementById('aiSummary');
+        const loadingStatus = document.getElementById('loadingStatus');
         const quizContainer = document.getElementById('quizContainer');
         const genBtn = document.getElementById('genBtn');
+        
+        let cleanedContext = ""; // AI가 정리한 핵심 내용 저장용 변수
 
         // 키 자동 로드
         document.getElementById('apiKey').value = localStorage.getItem('groq_key') || '';
 
-        // 1. 사진 촬영 및 OCR 
-        imageInput.onchange = async (e) => {
+        // 탭 전환 로직
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active', 'text-white'));
+            document.getElementById(`tab-${tabId}`).classList.add('active', 'text-white');
+            
+            document.getElementById('input-text').classList.add('hidden');
+            document.getElementById('input-file').classList.add('hidden');
+            document.getElementById(`input-${tabId}`).classList.remove('hidden');
+        }
+
+        // --- [핵심 1] 만능 파일 파서 ---
+        fileInput.onchange = async (e) => {
             const file = e.target.files[0];
             if (!file) return;
 
-            status.innerText = "⏳ 글자를 읽는 중... (Đang đọc chữ...)";
-            rawContent.value = "이미지를 분석하고 있습니다. 잠시만 기다려주세요...";
+            showLoading("⏳ 파일을 읽고 있습니다... (Đang đọc file...)");
+            analysisSection.classList.add('hidden');
+            quizContainer.innerHTML = '';
+            let rawText = "";
+
             try {
-                const result = await Tesseract.recognize(file, 'kor+eng');
-                rawContent.value = result.data.text;
-                status.innerText = "✅ 읽기 완료! 글자를 확인하고 아래 출제 버튼을 눌러주세요.";
+                const ext = file.name.split('.').pop().toLowerCase();
+                
+                if (file.type.startsWith('image/')) {
+                    // 1. 이미지 (Tesseract)
+                    const result = await Tesseract.recognize(file, 'kor+eng');
+                    rawText = result.data.text;
+                } else if (ext === 'pdf') {
+                    // 2. PDF
+                    const arrayBuffer = await file.arrayBuffer();
+                    const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const textContent = await page.getTextContent();
+                        rawText += textContent.items.map(item => item.str).join(' ') + " ";
+                    }
+                } else if (ext === 'docx' || ext === 'doc') {
+                    // 3. Word
+                    const arrayBuffer = await file.arrayBuffer();
+                    const result = await mammoth.extractRawText({arrayBuffer: arrayBuffer});
+                    rawText = result.value;
+                } else if (['xls', 'xlsx', 'csv'].includes(ext)) {
+                    // 4. Excel / CSV
+                    const arrayBuffer = await file.arrayBuffer();
+                    const workbook = XLSX.read(arrayBuffer, {type: 'array'});
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    rawText = XLSX.utils.sheet_to_csv(firstSheet);
+                } else {
+                    // 5. TXT, JSON 등 일반 텍스트
+                    rawText = await file.text();
+                }
+
+                if(rawText.trim().length < 5) throw new Error("텍스트를 찾을 수 없습니다.");
+                
+                // 텍스트 추출 완료 후 AI 요약으로 넘김
+                await analyzeWithAI(rawText);
+
             } catch (err) {
-                status.innerText = "❌ 에러 발생!";
-                rawContent.value = "";
+                console.error(err);
+                hideLoading();
+                alert("파일을 읽는 중 오류가 발생했습니다. 사진이 너무 흐리거나 지원하지 않는 형식일 수 있습니다.");
             }
         };
 
-        // 2. Groq API 호출 (사용자 맞춤형 언어 분리 프롬프트)
+        // 텍스트 수동 입력 처리
+        function processInput(type) {
+            if(type === 'text') {
+                const text = textContent.value;
+                if(!text.trim()) return alert("내용을 입력해주세요!");
+                analysisSection.classList.add('hidden');
+                quizContainer.innerHTML = '';
+                analyzeWithAI(text);
+            }
+        }
+
+        // --- [핵심 2] 외계어 번역 및 내용 요약 AI ---
+        async function analyzeWithAI(rawText) {
+            const key = document.getElementById('apiKey').value;
+            if (!key) return alert("API 키를 먼저 입력해주세요!");
+            localStorage.setItem('groq_key', key);
+
+            showLoading("🤖 AI가 내용을 파악하고 외계어를 교정 중입니다...");
+
+            const systemPrompt = `당신은 똑똑한 한국어 교사입니다. 
+사용자가 보낸 텍스트는 OCR이나 문서에서 추출되어 오타나 깨진 글자(외계어)가 섞여 있을 수 있습니다.
+깨진 글자는 무시하고, 문맥을 파악하여 '이 내용이 어떤 한국어 학습(어휘, 문법, 상황 등)을 다루고 있는지' 파악하세요.
+결과는 2~3줄의 깔끔한 한국어 요약과 베트남어 번역으로만 대답하세요. JSON이 아닌 일반 텍스트로 답하세요.`;
+
+            try {
+                const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                    method: "POST",
+                    headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        model: "llama-3.3-70b-versatile",
+                        messages: [
+                            { role: "system", content: systemPrompt }, 
+                            { role: "user", content: `다음 텍스트를 정리해주세요:\n\n${rawText.substring(0, 3000)}` } // 너무 긴 문서 방지
+                        ],
+                        temperature: 0.3
+                    })
+                });
+
+                const data = await res.json();
+                cleanedContext = data.choices[0].message.content; // 정리된 내용을 변수에 저장 (퀴즈 출제용)
+                
+                hideLoading();
+                aiSummary.innerText = cleanedContext;
+                analysisSection.classList.remove('hidden');
+
+            } catch (err) {
+                hideLoading();
+                alert("AI 분석 중 오류가 발생했습니다.");
+            }
+        }
+
+        // --- [핵심 3] 실전 퀴즈 생성 (회색 글씨 제거 완료!) ---
         async function generateQuiz() {
             const key = document.getElementById('apiKey').value;
-            localStorage.setItem('groq_key', key);
             
-            const content = rawContent.value;
-            if (!key || !content.trim()) {
-                alert("API 키와 텍스트 내용이 필요합니다!");
-                return;
-            }
-
-            genBtn.innerText = "👨‍🏫 40년 베테랑 강사가 문제 엄선 중... ⏳";
+            genBtn.innerText = "👨‍🏫 문제 출제 중... ⏳";
             genBtn.disabled = true;
-            status.innerText = "문제 출제 중입니다...";
             quizContainer.innerHTML = '';
 
-            // [핵심 변경] 베트남어 메인 질문 -> 한국어 서브 질문 -> 한국어 보기
+            // q_kr 완전 삭제, 오직 q_vn과 options(한국어)만 남김
             const systemPrompt = `당신은 40년 경력의 베테랑 한국어 교사입니다. 학생은 베트남인입니다.
-아래의 [출제 유형] 3가지 중 하나를 골라, 총 10문제를 구성하세요. 본문을 그대로 복사하는 것은 절대 금지입니다.
+제가 제공하는 '요약된 학습 내용'을 바탕으로, 아래 3가지 유형 중 하나를 골라 총 10문제를 출제하세요.
 
-[출제 유형 - 이 3가지 외에는 출제 불가]
-1. 상황에 맞는 문장 찾기: 베트남어로 상황을 설명하고, 그 상황에 맞는 한국어 대사를 고르게 하세요.
-2. 빈칸 채우기: 베트남어로 문맥을 설명하고, 빈칸(____)이 있는 한국어 문장을 제시한 뒤 알맞은 한국어 단어/동사를 고르게 하세요.
-3. 문장의 의도 파악: 한국어 문장을 제시하고, 이 문장이 어떤 상황에 쓰이는지 한국어로 설명된 보기를 고르게 하세요. (질문은 베트남어로)
+[출제 유형]
+1. 상황 대처: 베트남어로 상황을 설명하고, 가장 알맞은 한국어 대사를 고르게 하세요.
+2. 빈칸 채우기: 베트남어로 문맥을 설명하고, 빈칸(____)이 있는 문장을 베트남어 질문 안에 포함시켜 알맞은 한국어를 고르게 하세요.
+3. 의도 파악: 베트남어로 "다음 한국어 문장은 어떤 상황에 쓰이나요?"라고 묻고, 보기를 구성하세요.
 
-[언어 및 형식 절대 규칙]
-1. q_vn(메인 질문): 반드시 '베트남어'로만 상황이나 문제를 설명하세요.
-2. q_kr(서브 질문): 위 베트남어 질문의 '한국어 번역'이거나, 빈칸이 뚫린 '한국어 지문'을 넣으세요.
-3. options(보기): 4개의 보기는 무조건 100% '한국어'로만 작성하세요. 베트남어 힌트 금지.
-4. 금지어: 태국어, 아랍어, 영어, 발음 기호(Romanization) 절대 사용 금지.
-5. 문항 수: 무조건 정확히 10문제.
-6. exp(해설): 베트남어로 상세히 설명하세요.
+[절대 규칙]
+1. q_vn: '반드시 베트남어'로만 질문과 상황을 적으세요. (빈칸 문제일 경우 베트남어 설명 안에 한국어 텍스트와 빈칸을 자연스럽게 섞어 쓰세요).
+2. options: 4개의 보기는 '무조건 100% 한국어'로만 작성하세요. 힌트 금지.
+3. 금지어: 영어 발음 표기(Romanization), 태국어 절대 금지.
+4. 문항 수: 정확히 10문제.
+5. exp: 베트남어로 상세히 설명.
 
-[JSON 구조 가이드]
+[JSON 구조]
 {
   "questions": [
     {
-      "q_vn": "베트남어로 된 메인 질문 및 상황 설명",
-      "q_kr": "한국어로 번역된 질문 또는 빈칸이 포함된 한국어 지문",
-      "options": ["한국어 보기 1", "한국어 보기 2", "한국어 보기 3", "한국어 보기 4"],
+      "q_vn": "베트남어 질문 및 상황 설명 (빈칸 문제라면 여기에 한국어 예문 + ____ 포함)",
+      "options": ["한국어 1", "한국어 2", "한국어 3", "한국어 4"],
       "a": 0,
       "exp": "베트남어 해설"
     }
@@ -129,7 +242,7 @@
                         model: "llama-3.3-70b-versatile",
                         messages: [
                             { role: "system", content: systemPrompt }, 
-                            { role: "user", content: `오늘의 교재 내용이다. 이 내용을 바탕으로 영어 발음 표기 없이 정확히 10문제를 내거라: ${content}` }
+                            { role: "user", content: `다음 학습 내용을 바탕으로 10문제를 내주세요:\n\n${cleanedContext}` }
                         ],
                         response_format: { type: "json_object" },
                         temperature: 0.4, 
@@ -141,46 +254,32 @@
                 
                 if (data.choices && data.choices[0].message.content) {
                     const json = JSON.parse(data.choices[0].message.content);
-                    
-                    if (json.questions.length < 10) {
-                        status.innerText = `⚠️ 10개 중 ${json.questions.length}개만 생성되었습니다. 한 번 더 출제 버튼을 눌러보세요.`;
-                    } else {
-                        status.innerText = "✨ 실전 어학 퀴즈 10문제 완성!";
-                    }
-                    
                     renderQuiz(json.questions);
-                } else {
-                    throw new Error("Invalid API Response");
                 }
-
             } catch (err) {
                 console.error(err);
-                status.innerText = "❌ 퀴즈 생성 중 오류 발생! 다시 시도해주세요.";
-                alert("AI 출제 중 오류가 발생했습니다. 개발자 도구 콘솔을 확인해주세요.");
+                alert("AI 출제 중 오류가 발생했습니다.");
             } finally {
-                genBtn.innerText = "🚀 실전 어학 10문제 출제하기";
+                genBtn.innerText = "🚀 실전 퀴즈 10문제 출제하기";
                 genBtn.disabled = false;
             }
         }
 
-        // 3. 퀴즈 앱 화면 렌더링 (UI 로직 변경)
+        // 퀴즈 렌더링 (q_kr 삭제, q_vn만 렌더링)
         function renderQuiz(questions) {
             questions.forEach((q, qIdx) => {
                 const qDiv = document.createElement('div');
                 qDiv.className = "bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-lg animate-fade-in";
                 
-                // 보기는 무조건 한국어
                 let optionsHtml = q.options.map((opt, oIdx) => `
                     <button onclick="checkAnswer(this, ${qIdx}, ${oIdx}, ${q.a}, '${q.exp.replace(/'/g, "\\'")}')" 
-                            class="w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-700 hover:border-emerald-500 transition-all text-sm mb-2 font-medium">
+                            class="w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-700 hover:border-emerald-500 transition-all text-base mb-2 font-medium">
                         ${oIdx + 1}. ${opt}
                     </button>
                 `).join('');
 
-                // q_vn(베트남어)는 크고 굵게, q_kr(한국어 지문/번역)는 작고 흐리게
                 qDiv.innerHTML = `
-                    <p class="font-bold text-lg mb-1 text-emerald-100">${qIdx + 1}. ${q.q_vn}</p>
-                    <p class="text-sm text-slate-400 mb-5 break-keep">${q.q_kr}</p>
+                    <p class="font-bold text-lg mb-4 text-emerald-100 leading-relaxed">${qIdx + 1}. ${q.q_vn}</p>
                     <div id="q-${qIdx}-options">${optionsHtml}</div>
                     <div id="q-${qIdx}-feedback" class="hidden mt-3 text-xs p-4 rounded-xl bg-slate-900 border-l-4 border-emerald-500 text-slate-300 leading-relaxed shadow-inner"></div>
                 `;
@@ -188,13 +287,11 @@
             });
         }
 
-        // 4. 정답 체크 및 피드백
         function checkAnswer(btn, qIdx, selected, correct, explanation) {
             const optionsDiv = document.getElementById(`q-${qIdx}-options`);
             const feedbackDiv = document.getElementById(`q-${qIdx}-feedback`);
             const buttons = optionsDiv.querySelectorAll('button');
 
-            // 모든 버튼 비활성화
             buttons.forEach(b => b.disabled = true);
 
             if (selected === correct) {
@@ -206,6 +303,15 @@
                 feedbackDiv.innerHTML = `<span class="text-red-400 text-base">❌ <strong>Sai rồi! (틀렸어요!)</strong></span><br><br>${explanation}`;
             }
             feedbackDiv.classList.remove('hidden');
+        }
+
+        // 유틸리티 함수
+        function showLoading(msg) {
+            loadingStatus.innerText = msg;
+            loadingStatus.classList.remove('hidden');
+        }
+        function hideLoading() {
+            loadingStatus.classList.add('hidden');
         }
     </script>
 </body>
