@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Teacher Assistant - KR/VN</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .loading { display: none; }
+        .loading.active { display: block; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-5">
+    <div class="max-w-2xl mx-auto bg-white p-8 rounded-xl shadow-md">
+        <h1 class="text-2xl font-bold mb-6 text-center text-blue-600">🇰🇷 AI 한국어 선생님 🇻🇳</h1>
+        
+        <div class="mb-6 p-4 bg-yellow-50 rounded-lg">
+            <input type="password" id="apiKey" placeholder="Groq API Key 입력" class="w-full p-2 border rounded">
+            <p class="text-xs text-gray-500 mt-1">* API 키는 브라우저에만 저장됩니다.</p>
+        </div>
+
+        <div class="mb-6">
+            <label class="block mb-2 font-semibold">오늘의 공부 내용 (텍스트/OCR 복사본):</label>
+            <textarea id="studyContent" rows="5" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-400" placeholder="교과서 내용을 여기에 붙여넣으세요..."></textarea>
+        </div>
+
+        <button onclick="generateQuiz()" id="genBtn" class="w-full bg-blue-500 text-white py-3 rounded-lg font-bold hover:bg-blue-600 transition">
+            데일리 퀴즈 10개 생성하기 🚀
+        </button>
+
+        <div id="loader" class="loading mt-6 text-center text-gray-600 animate-pulse">
+            Groq AI가 퀴즈를 만들고 있습니다 (Llama-3.3-70b)...
+        </div>
+
+        <div id="quizResult" class="mt-8 space-y-4">
+            </div>
+    </div>
+
+    <script>
+        // 모델 리스트 (2026년 기준 가용 모델 노크 전략)
+        const MODELS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
+
+        async function generateQuiz() {
+            const apiKey = document.getElementById('apiKey').value || localStorage.getItem('groq_key');
+            const content = document.getElementById('studyContent').value;
+            
+            if (!apiKey || !content) return alert("API 키와 공부 내용을 입력해주세요!");
+            localStorage.setItem('groq_key', apiKey);
+
+            const btn = document.getElementById('genBtn');
+            const loader = document.getElementById('loader');
+            const resultDiv = document.getElementById('quizResult');
+
+            btn.disabled = true;
+            loader.classList.add('active');
+            resultDiv.innerHTML = '';
+
+            const systemPrompt = `당신은 한국어를 공부하는 베트남인을 위한 최고의 AI 선생님입니다. 
+            제공된 텍스트를 기반으로 데일리 퀴즈 10개를 만드세요.
+            - 형식: JSON (questions: [{q: "문제", options: ["1","2","3","4"], a: 0, explanation: "베트남어 설명"}])
+            - 모든 문제는 한국어와 베트남어를 병기하세요.
+            - 해설(explanation)은 반드시 베트남어로 작성하세요.`;
+
+            try {
+                const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${apiKey}`,
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        model: MODELS[0],
+                        messages: [
+                            { role: "system", content: systemPrompt },
+                            { role: "user", content: content }
+                        ],
+                        response_format: { type: "json_object" }
+                    })
+                });
+
+                const data = await response.json();
+                const quizData = JSON.parse(data.choices[0].message.content);
+                renderQuiz(quizData.questions);
+            } catch (error) {
+                console.error(error);
+                alert("에러 발생! 콘솔을 확인하세요.");
+            } finally {
+                btn.disabled = false;
+                loader.classList.remove('active');
+            }
+        }
+
+        function renderQuiz(questions) {
+            const container = document.getElementById('quizResult');
+            questions.forEach((item, idx) => {
+                const qEl = document.createElement('div');
+                qEl.className = "p-4 border rounded-lg bg-gray-50";
+                qEl.innerHTML = `
+                    <p class="font-bold mb-2">${idx + 1}. ${item.q}</p>
+                    <div class="space-y-1 ml-2">
+                        ${item.options.map((opt, i) => `<p class="text-sm">${i+1}) ${opt}</p>`).join('')}
+                    </div>
+                    <details class="mt-3 text-sm text-blue-600">
+                        <summary class="cursor-pointer font-semibold text-green-600">정답 및 해설 보기 (Giải thích)</summary>
+                        <p class="mt-2 bg-white p-2 border-l-4 border-green-500 text-gray-700">
+                            정답: ${item.options[item.a]}<br>
+                            ${item.explanation}
+                        </p>
+                    </details>
+                `;
+                container.appendChild(qEl);
+            });
+        }
+        
+        // 초기 로드 시 키 세팅
+        document.getElementById('apiKey').value = localStorage.getItem('groq_key') || '';
+    </script>
+</body>
+</html>
