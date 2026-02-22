@@ -367,21 +367,17 @@
 
             const systemPrompt = `당신은 40년 경력의 무서운 한국어 교사입니다. 학생은 베트남인입니다.
 
-[★언어 분리 절대 규칙 (CRITICAL)★ - 이 규칙을 어기면 시스템 오류가 발생합니다]
-1. q_vn (질문): 무조건 '베트남어(Tiếng Việt)'로만 작성하세요. (단, 빈칸 문제의 예문에만 한국어 허용)
-2. options (보기 4개): ★★★ 무조건 100% '한국어(Korean)'로만 작성하세요! ★★★ 
-   - 보기에 베트남어 뜻을 병기하거나 번역을 절대 달지 마세요. 
-   - 오직 순수 한국어 단어/문장만 들어가야 합니다. 
-   - (올바른 예시: ["안녕하세요", "반갑습니다", "고맙습니다", "안녕히 계세요"]) 
-   - (틀린 예시 - 절대 금지: ["Xin chào", "Cảm ơn", "Tạm biệt", "Làm ơn"])
-3. exp (해설): 무조건 '베트남어(Tiếng Việt)'로만 작성하여 왜 정답인지 설명하세요.
+[★언어 분리 절대 규칙★]
+1. q_vn: 100% 베트남어로 질문 (빈칸 문제일 경우에만 한국어 지문 포함)
+2. options_korean_only: ★100% 한국어로만 작성★ (베트남어 절대 금지, 4개 보기)
+3. exp: 100% 베트남어로 해설 작성
 
 [출제 지침]
 - 상황 대처, 빈칸 채우기, 의도 파악 3가지 유형을 섞어서 출제.
 - 무조건 '정확히 ${currentTotalQuizzes}문제' 출제.
 
 [JSON 구조]
-{ "questions": [ { "q_vn": "...", "options": ["..","..","..",".."], "a": 0, "exp": "..." } ] }`;
+{ "questions": [ { "q_vn": "...", "options_korean_only": ["한국어","한국어","한국어","한국어"], "a": 0, "exp": "..." } ] }`;
 
             try {
                 const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -391,7 +387,7 @@
                         model: "llama-3.3-70b-versatile",
                         messages: [{ role: "system", content: systemPrompt }, { role: "user", content: `학습 요약본: ${appState.material}` }],
                         response_format: { type: "json_object" },
-                        temperature: 0.4, 
+                        temperature: 0.2, // 딴짓 못하게 0.4 -> 0.2로 하향
                         max_tokens: 8000
                     })
                 });
@@ -412,7 +408,7 @@
             questions.forEach((q, qIdx) => {
                 const qDiv = document.createElement('div');
                 qDiv.className = "bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-lg animate-fade-in";
-                let optionsHtml = q.options.map((opt, oIdx) => `
+                let optionsHtml = q.options_korean_only.map((opt, oIdx) => `
                     <button onclick="handleAnswer(this, ${qIdx}, ${oIdx}, ${q.a}, '${q.exp.replace(/'/g, "\\'")}', ${questions.length})" 
                             class="w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-700 hover:border-emerald-500 mb-2 font-medium">
                         ${oIdx + 1}. ${opt}
