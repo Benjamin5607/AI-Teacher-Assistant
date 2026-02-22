@@ -19,33 +19,33 @@
         </header>
 
         <details class="bg-slate-800 rounded-xl border border-slate-700">
-            <summary class="p-3 text-xs text-slate-500 cursor-pointer">API Settings</summary>
+            <summary class="p-3 text-xs text-slate-500 cursor-pointer">⚙️ API Settings</summary>
             <div class="p-4">
-                <input type="password" id="apiKey" placeholder="Groq API Key" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-2 text-sm">
+                <input type="password" id="apiKey" placeholder="Groq API Key" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-2 text-sm focus:border-emerald-500 focus:outline-none">
             </div>
         </details>
 
         <section class="bg-slate-800 p-6 rounded-2xl shadow-xl border border-slate-700">
             <label class="block cursor-pointer group">
-                <div class="bg-emerald-600 group-hover:bg-emerald-500 p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all">
-                    <span>📸 사진 찍고 퀴즈 만들기</span>
+                <div class="bg-emerald-600 group-hover:bg-emerald-500 p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg">
+                    <span>📸 1. 교재 사진 찍기</span>
                 </div>
                 <input type="file" id="imageInput" accept="image/*" capture="environment" class="hidden">
             </label>
-            <div id="status" class="text-center text-xs mt-3 text-slate-500 font-medium">교재 사진을 찍어주세요!</div>
+            <div id="status" class="text-center text-xs mt-3 text-emerald-400 font-medium font-bold">교재 사진을 찍어주세요!</div>
         </section>
 
-        <details class="bg-slate-800 rounded-xl border border-slate-700">
-            <summary class="p-3 text-xs text-slate-500 cursor-pointer">Edit Extracted Text</summary>
-            <textarea id="rawContent" rows="3" class="w-full bg-slate-900 border-none p-3 text-sm text-slate-400"></textarea>
+        <details class="bg-slate-800 rounded-xl border border-slate-700" open>
+            <summary class="p-3 text-xs text-slate-500 cursor-pointer">📝 2. 추출된 텍스트 확인 및 퀴즈 생성</summary>
+            <div class="p-4 space-y-4">
+                <textarea id="rawContent" rows="4" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-sm text-slate-300 focus:outline-none focus:border-emerald-500" placeholder="추출된 글자가 나타납니다. 오타가 있다면 살짝 수정해주세요!"></textarea>
+                <button onclick="generateQuiz()" id="genBtn" class="w-full bg-blue-600 hover:bg-blue-500 p-4 rounded-xl font-bold transition-all disabled:opacity-50 text-white shadow-lg">
+                    🚀 3. 이 내용으로 10문제 출제하기
+                </button>
+            </div>
         </details>
 
-        <div id="quizContainer" class="space-y-6"></div>
-        
-        <div id="analysisResult" class="hidden bg-blue-900/40 p-6 rounded-2xl border border-blue-500/30">
-            <h3 class="text-xl font-bold text-blue-300 mb-2">📊 Weekly Analysis Guide</h3>
-            <div id="analysisText" class="text-sm text-slate-300 leading-relaxed"></div>
-        </div>
+        <div id="quizContainer" class="space-y-6 pb-10"></div>
     </div>
 
     <script>
@@ -53,55 +53,64 @@
         const status = document.getElementById('status');
         const rawContent = document.getElementById('rawContent');
         const quizContainer = document.getElementById('quizContainer');
+        const genBtn = document.getElementById('genBtn');
 
         // 키 자동 로드
         document.getElementById('apiKey').value = localStorage.getItem('groq_key') || '';
 
-        // 1. 사진 촬영 및 OCR
+        // 1. 사진 촬영 및 OCR (자동 퀴즈 생성 제거 -> 유저가 텍스트 확인 후 버튼 누르도록)
         imageInput.onchange = async (e) => {
             const file = e.target.files[0];
             if (!file) return;
 
             status.innerText = "⏳ 글자를 읽는 중... (Đang đọc chữ...)";
+            rawContent.value = "이미지를 분석하고 있습니다. 잠시만 기다려주세요...";
             try {
                 const result = await Tesseract.recognize(file, 'kor+eng');
                 rawContent.value = result.data.text;
-                status.innerText = "✅ 읽기 완료! 퀴즈를 생성합니다...";
-                generateQuiz(); // 텍스트 읽자마자 퀴즈 생성 자동 실행
+                status.innerText = "✅ 읽기 완료! 글자를 확인하고 아래 출제 버튼을 눌러주세요.";
             } catch (err) {
                 status.innerText = "❌ 에러 발생!";
+                rawContent.value = "";
             }
         };
 
-        // 2. Groq API 호출 (40년 베테랑 강사 모드)
+        // 2. Groq API 호출 (40년 베테랑 강사 모드 V3 - 엄격한 룰 적용)
         async function generateQuiz() {
             const key = document.getElementById('apiKey').value;
             localStorage.setItem('groq_key', key);
             
             const content = rawContent.value;
-            if (!key || !content) return;
+            if (!key || !content.trim()) {
+                alert("API 키와 텍스트 내용이 필요합니다!");
+                return;
+            }
 
-            status.innerText = "👨‍🏫 40년 경력 베테랑 강사가 문제를 분석 중...";
+            // UI 상태 변경
+            genBtn.innerText = "👨‍🏫 40년 베테랑 강사가 문제 엄선 중... ⏳";
+            genBtn.disabled = true;
+            status.innerText = "문제 출제 중입니다...";
             quizContainer.innerHTML = '';
 
-            // 페르소나와 출제 지침을 강화한 시스템 프롬프트
-            const systemPrompt = `당신은 40년 경력의 베테랑 한국어 교사입니다. 
-당신의 임무는 학생이 제공한 교재 내용을 '재료'로 삼아, 실전 대화 상황을 '창의적으로 설계'하여 퀴즈를 내는 것입니다.
+            // [핵심 변경] 환각 방지, 10문제 강제, 영어 알파벳 금지를 촘촘히 엮은 프롬프트
+            const systemPrompt = `당신은 40년 경력의 베테랑 한국어 교사입니다. 학생은 베트남인입니다.
+아래의 [절대 규칙]을 무조건 지키세요. 어길 시 시스템 오류가 발생합니다.
 
-[출제 철학]
-1. 단순 복제 금지: 교재에 "안녕하세요"가 있다고 해서 "똑같은 문장을 고르세요" 같은 무의미한 문제는 절대 내지 마세요.
-2. 상황 유추: 텍스트가 "저는 스미스입니다"라면, '자기소개 상황'임을 유추하여 "처음 만난 사람에게 자신을 소개할 때 알맞은 표현은?" 같은 상황 판단 문제를 내세요.
-3. 오답 구성: 오답은 단순히 단어를 바꾼 것이 아니라, 한국어 학습자가 실제로 헷갈릴 만한 '잘못된 격식'이나 '어색한 표현'으로 구성하세요.
-4. 언어 고정: 오직 한국어와 베트남어만 사용하세요. 아랍어나 기타 외국어는 절대 사용하지 마세요.
+[절대 규칙]
+1. 언어 제한: 오직 '한국어'와 '베트남어'만 사용하세요.
+2. 발음 기호 금지: 한국어를 영어 알파벳(Romanization)으로 표기하는 것을 '절대 금지'합니다. (예: Annyeonghaseyo 금지). 태국어나 아랍어도 절대 쓰지 마세요.
+3. 문항 수: 무조건 '정확히 10문제'를 출제해야 합니다.
+4. 출제 방식: 본문을 단순 복사하지 말고, 텍스트의 상황을 유추하여 실전 회화, 문법, 어휘 응용문제를 만드세요.
+5. 해설(exp): 베트남어로 작성하며, 왜 정답인지 한국 문화나 뉘앙스 차이는 무엇인지 40년 베테랑의 팁을 담아 상세히 설명하세요.
 
 [JSON 구조 가이드]
 {
   "questions": [
     {
-      "q": "상황 제시형 질문 (한국어 + 베트남어 뜻)",
-      "options": ["실제 대화 선택지 1", "2", "3", "4"],
-      "a": 정답 인덱스,
-      "exp": "이 상황에서 왜 이 표현이 정답인지, 베트남 사람들을 위해 40년 노하우를 담은 베트남어 해설"
+      "q": "상황 제시형 질문 (한국어 + 베트남어 뜻 병기)",
+      "options": ["한국어 보기 1", "한국어 보기 2", "한국어 보기 3", "한국어 보기 4"],
+      "a": 0,
+      "exp": "베트남어 해설 (알파벳 발음 표기 절대 금지)"
     }
   ]
 }`;
@@ -114,28 +123,39 @@
                         model: "llama-3.3-70b-versatile",
                         messages: [
                             { role: "system", content: systemPrompt }, 
-                            { role: "user", content: `오늘의 교재 내용이다. 이 내용을 바탕으로 최고의 문제를 내거라: ${content}` }
+                            { role: "user", content: `오늘의 교재 내용이다. 이 내용을 바탕으로 영어 발음 표기 없이 정확히 10문제를 내거라: ${content}` }
                         ],
                         response_format: { type: "json_object" },
-                        temperature: 0.7, // 약간의 창의성을 주어 더 좋은 문제를 내게 함
-                        max_tokens: 4096
+                        temperature: 0.5, // 환각(엉뚱한 언어)을 줄이고 정석적인 답변을 위해 0.7에서 0.5로 하향
+                        max_tokens: 6000  // 10문제 데이터가 중간에 잘리지 않도록 토큰 최대치 넉넉하게 확보
                     })
                 });
 
                 const data = await res.json();
                 
-                // Groq API 응답 구조에 맞게 안전하게 파싱
                 if (data.choices && data.choices[0].message.content) {
                     const json = JSON.parse(data.choices[0].message.content);
+                    
+                    // 문항 수 체크 로직 추가
+                    if (json.questions.length < 10) {
+                        status.innerText = `⚠️ 10개 중 ${json.questions.length}개만 생성되었습니다. 한 번 더 출제 버튼을 눌러보세요.`;
+                    } else {
+                        status.innerText = "✨ 베테랑 강사의 족집게 10문제 완성!";
+                    }
+                    
                     renderQuiz(json.questions);
-                    status.innerText = "✨ 베테랑 강사의 족집게 퀴즈 완성!";
                 } else {
                     throw new Error("Invalid API Response");
                 }
 
             } catch (err) {
                 console.error(err);
-                status.innerText = "❌ 퀴즈 생성 중 오류 발생! (API 키나 모델 확인)";
+                status.innerText = "❌ 퀴즈 생성 중 오류 발생! 다시 시도해주세요.";
+                alert("AI 출제 중 오류가 발생했습니다. 개발자 도구 콘솔을 확인해주세요.");
+            } finally {
+                // 버튼 원상복구
+                genBtn.innerText = "🚀 이 내용으로 10문제 출제하기";
+                genBtn.disabled = false;
             }
         }
 
@@ -155,7 +175,7 @@
                 qDiv.innerHTML = `
                     <p class="font-bold text-lg mb-4 text-emerald-100">${qIdx + 1}. ${q.q}</p>
                     <div id="q-${qIdx}-options">${optionsHtml}</div>
-                    <div id="q-${qIdx}-feedback" class="hidden mt-3 text-xs p-3 rounded-lg bg-slate-900 border-l-4 border-emerald-500 text-slate-300"></div>
+                    <div id="q-${qIdx}-feedback" class="hidden mt-3 text-xs p-4 rounded-xl bg-slate-900 border-l-4 border-emerald-500 text-slate-300 leading-relaxed shadow-inner"></div>
                 `;
                 quizContainer.appendChild(qDiv);
             });
@@ -172,11 +192,11 @@
 
             if (selected === correct) {
                 btn.classList.add('correct');
-                feedbackDiv.innerHTML = `✅ <strong>Chính xác! (정답!)</strong><br>${explanation}`;
+                feedbackDiv.innerHTML = `<span class="text-emerald-400 text-base">✅ <strong>Chính xác! (정답!)</strong></span><br><br>${explanation}`;
             } else {
                 btn.classList.add('wrong');
                 buttons[correct].classList.add('correct');
-                feedbackDiv.innerHTML = `❌ <strong>Sai rồi! (틀렸어요!)</strong><br>${explanation}`;
+                feedbackDiv.innerHTML = `<span class="text-red-400 text-base">❌ <strong>Sai rồi! (틀렸어요!)</strong></span><br><br>${explanation}`;
             }
             feedbackDiv.classList.remove('hidden');
         }
