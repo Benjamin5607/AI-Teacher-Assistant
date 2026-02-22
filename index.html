@@ -3,142 +3,151 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Teacher Assistant | KR-VN</title>
+    <title>AI Teacher Assistant</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src='https://unpkg.com/tesseract.js@v5.0.2/dist/tesseract.min.js'></script>
+    <style>
+        .correct { background-color: #10b981 !important; color: white; border-color: #10b981; }
+        .wrong { background-color: #ef4444 !important; color: white; border-color: #ef4444; }
+    </style>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen p-4">
-    <div class="max-w-md mx-auto space-y-6">
-        <header class="text-center py-4">
-            <h1 class="text-3xl font-black text-emerald-400">AI TEACHER 🎓</h1>
-            <p class="text-slate-400 text-sm">For My Vietnamese Student (KR Study)</p>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+    <div class="max-w-md mx-auto p-6 space-y-6">
+        <header class="text-center">
+            <h1 class="text-3xl font-black text-emerald-400">K-TUTOR 🎓</h1>
+            <p class="text-slate-400 text-sm">For My Vietnamese Student</p>
         </header>
 
-        <section class="bg-slate-800 p-4 rounded-2xl shadow-xl border border-slate-700">
-            <input type="password" id="apiKey" placeholder="Enter Groq API Key" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-sm focus:outline-none focus:border-emerald-500 mb-2">
-            <select id="modelSelect" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-sm focus:outline-none">
-                <option value="llama-3.3-70b-versatile">Llama 3.3 70B (Best Intelligence)</option>
-                <option value="llama-3.1-8b-instant">Llama 3.1 8B (Fastest)</option>
-            </select>
-        </section>
+        <details class="bg-slate-800 rounded-xl border border-slate-700">
+            <summary class="p-3 text-xs text-slate-500 cursor-pointer">API Settings</summary>
+            <div class="p-4">
+                <input type="password" id="apiKey" placeholder="Groq API Key" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-2 text-sm">
+            </div>
+        </details>
 
-        <section class="bg-slate-800 p-6 rounded-2xl shadow-xl border border-slate-700 text-center">
-            <label class="block mb-4 cursor-pointer">
-                <div class="bg-emerald-600 hover:bg-emerald-500 p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all">
-                    <span>📸 사진 찍기 / 업로드</span>
+        <section class="bg-slate-800 p-6 rounded-2xl shadow-xl border border-slate-700">
+            <label class="block cursor-pointer group">
+                <div class="bg-emerald-600 group-hover:bg-emerald-500 p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all">
+                    <span>📸 사진 찍고 퀴즈 만들기</span>
                 </div>
                 <input type="file" id="imageInput" accept="image/*" capture="environment" class="hidden">
             </label>
-            <canvas id="canvas" class="hidden w-full rounded-lg mb-4 border border-slate-600"></canvas>
-            <div id="ocrStatus" class="text-xs text-slate-500 mt-2">대기 중...</div>
+            <div id="status" class="text-center text-xs mt-3 text-slate-500 font-medium">교재 사진을 찍어주세요!</div>
         </section>
 
-        <section class="bg-slate-800 p-4 rounded-2xl shadow-xl border border-slate-700">
-            <textarea id="rawContent" rows="4" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-sm text-slate-300 focus:outline-none" placeholder="추출된 텍스트가 여기에 나타납니다..."></textarea>
-            <button onclick="generateQuiz()" id="genBtn" class="w-full mt-4 bg-blue-600 hover:bg-blue-500 p-4 rounded-xl font-bold transition-all disabled:opacity-50">
-                DAILY QUIZ 10 생성 🚀
-            </button>
-        </section>
+        <details class="bg-slate-800 rounded-xl border border-slate-700">
+            <summary class="p-3 text-xs text-slate-500 cursor-pointer">Edit Extracted Text</summary>
+            <textarea id="rawContent" rows="3" class="w-full bg-slate-900 border-none p-3 text-sm text-slate-400"></textarea>
+        </details>
 
-        <div id="quizResult" class="space-y-4 pb-10"></div>
+        <div id="quizContainer" class="space-y-6"></div>
+        
+        <div id="analysisResult" class="hidden bg-blue-900/40 p-6 rounded-2xl border border-blue-500/30">
+            <h3 class="text-xl font-bold text-blue-300 mb-2">📊 Weekly Analysis Guide</h3>
+            <div id="analysisText" class="text-sm text-slate-300 leading-relaxed"></div>
+        </div>
     </div>
 
     <script>
         const imageInput = document.getElementById('imageInput');
-        const ocrStatus = document.getElementById('ocrStatus');
+        const status = document.getElementById('status');
         const rawContent = document.getElementById('rawContent');
-        const quizResult = document.getElementById('quizResult');
+        const quizContainer = document.getElementById('quizContainer');
 
-        // 1. 이미지 선택 시 즉시 OCR 실행
+        // 키 자동 로드
+        document.getElementById('apiKey').value = localStorage.getItem('groq_key') || '';
+
+        // 1. 사진 촬영 및 OCR
         imageInput.onchange = async (e) => {
             const file = e.target.files[0];
             if (!file) return;
 
-            ocrStatus.innerText = "텍스트를 읽는 중... (Wait a sec)";
-            ocrStatus.className = "text-xs text-yellow-400 mt-2";
-
+            status.innerText = "⏳ 글자를 읽는 중... (Đang đọc chữ...)";
             try {
-                const result = await Tesseract.recognize(file, 'kor+eng', {
-                    logger: m => console.log(m)
-                });
+                const result = await Tesseract.recognize(file, 'kor+eng');
                 rawContent.value = result.data.text;
-                ocrStatus.innerText = "분석 완료!";
-                ocrStatus.className = "text-xs text-emerald-400 mt-2";
+                status.innerText = "✅ 읽기 완료! 퀴즈를 생성합니다...";
+                generateQuiz(); // 텍스트 읽자마자 퀴즈 생성 자동 실행
             } catch (err) {
-                console.error(err);
-                ocrStatus.innerText = "OCR 에러 발생";
-                ocrStatus.className = "text-xs text-red-400 mt-2";
+                status.innerText = "❌ 에러 발생!";
             }
         };
 
-        // 2. Groq API로 퀴즈 생성
+        // 2. Groq API 호출
         async function generateQuiz() {
-            const key = document.getElementById('apiKey').value || localStorage.getItem('groq_key');
-            const content = rawContent.value;
-            const model = document.getElementById('modelSelect').value;
-
-            if (!key || !content) return alert("Key와 내용을 확인하세요!");
+            const key = document.getElementById('apiKey').value;
             localStorage.setItem('groq_key', key);
+            
+            const content = rawContent.value;
+            if (!key || !content) return;
 
-            const btn = document.getElementById('genBtn');
-            btn.innerText = "AI 생각 중...";
-            btn.disabled = true;
-            quizResult.innerHTML = '';
+            status.innerText = "🤖 AI 선생님 문제 출제 중...";
+            quizContainer.innerHTML = '';
 
-            const systemPrompt = `You are a Korean teacher for Vietnamese students. Based on the textbook text, generate 10 quizzes.
-            Format: JSON { "questions": [{ "q": "Korean (Vietnamese translation)", "options": ["1","2","3","4"], "a": 0, "exp": "Explanation in Vietnamese" }] }
-            Ensure the tone is kind and helpful (Kính ngữ).`;
+            const systemPrompt = `You are a Korean teacher. Create 10 quizzes for a Vietnamese student.
+            Format: JSON { "questions": [{ "q": "Question", "options": ["1","2","3","4"], "a": 0, "exp": "Explanation in Vietnamese" }] }`;
 
             try {
                 const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                     method: "POST",
                     headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
                     body: JSON.stringify({
-                        model: model,
-                        messages: [
-                            { role: "system", content: systemPrompt },
-                            { role: "user", content: `Textbook content: ${content}` }
-                        ],
-                        response_format: { type: "json_object" },
-                        temperature: 0.7
+                        model: "llama-3.3-70b-versatile",
+                        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: content }],
+                        response_format: { type: "json_object" }
                     })
                 });
 
                 const data = await res.json();
                 const json = JSON.parse(data.choices[0].message.content);
-                render(json.questions);
+                renderQuiz(json.questions);
+                status.innerText = "✨ 오늘의 퀴즈 완성!";
             } catch (err) {
-                console.error(err);
-                alert("Groq 호출 에러!");
-            } finally {
-                btn.innerText = "DAILY QUIZ 10 생성 🚀";
-                btn.disabled = false;
+                status.innerText = "❌ AI 퀴즈 생성 실패!";
             }
         }
 
-        function render(questions) {
-            questions.forEach((q, i) => {
-                const div = document.createElement('div');
-                div.className = "bg-slate-800 p-5 rounded-2xl border-l-4 border-emerald-500 shadow-lg";
-                div.innerHTML = `
-                    <p class="font-bold text-lg mb-3 leading-snug">${i+1}. ${q.q}</p>
-                    <div class="grid grid-cols-1 gap-2 mb-4">
-                        ${q.options.map((opt, idx) => `<button class="text-left p-3 rounded-lg bg-slate-900 hover:bg-slate-700 text-sm transition-colors border border-slate-700">${idx+1}. ${opt}</button>`).join('')}
-                    </div>
-                    <details class="group">
-                        <summary class="text-sm text-emerald-400 cursor-pointer font-semibold list-none">정답 및 베트남어 해설 보기</summary>
-                        <div class="mt-3 text-sm text-slate-400 bg-slate-900 p-3 rounded-lg border-t border-emerald-500/30">
-                            <span class="text-emerald-400 font-bold">정답: ${q.options[q.a]}</span><br>
-                            ${q.exp}
-                        </div>
-                    </details>
+        // 3. 퀴즈 앱 화면 렌더링
+        function renderQuiz(questions) {
+            questions.forEach((q, qIdx) => {
+                const qDiv = document.createElement('div');
+                qDiv.className = "bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-lg animate-fade-in";
+                
+                let optionsHtml = q.options.map((opt, oIdx) => `
+                    <button onclick="checkAnswer(this, ${qIdx}, ${oIdx}, ${q.a}, '${q.exp.replace(/'/g, "\\'")}')" 
+                            class="w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-700 hover:border-emerald-500 transition-all text-sm mb-2">
+                        ${oIdx + 1}. ${opt}
+                    </button>
+                `).join('');
+
+                qDiv.innerHTML = `
+                    <p class="font-bold text-lg mb-4 text-emerald-100">${qIdx + 1}. ${q.q}</p>
+                    <div id="q-${qIdx}-options">${optionsHtml}</div>
+                    <div id="q-${qIdx}-feedback" class="hidden mt-3 text-xs p-3 rounded-lg bg-slate-900 border-l-4 border-emerald-500 text-slate-300"></div>
                 `;
-                quizResult.appendChild(div);
+                quizContainer.appendChild(qDiv);
             });
         }
 
-        // 키 자동 로드
-        document.getElementById('apiKey').value = localStorage.getItem('groq_key') || '';
+        // 4. 정답 체크 및 피드백
+        function checkAnswer(btn, qIdx, selected, correct, explanation) {
+            const optionsDiv = document.getElementById(`q-${qIdx}-options`);
+            const feedbackDiv = document.getElementById(`q-${qIdx}-feedback`);
+            const buttons = optionsDiv.querySelectorAll('button');
+
+            // 모든 버튼 비활성화
+            buttons.forEach(b => b.disabled = true);
+
+            if (selected === correct) {
+                btn.classList.add('correct');
+                feedbackDiv.innerHTML = `✅ <strong>Chính xác! (정답!)</strong><br>${explanation}`;
+            } else {
+                btn.classList.add('wrong');
+                buttons[correct].classList.add('correct');
+                feedbackDiv.innerHTML = `❌ <strong>Sai rồi! (틀렸어요!)</strong><br>${explanation}`;
+            }
+            feedbackDiv.classList.remove('hidden');
+        }
     </script>
 </body>
 </html>
