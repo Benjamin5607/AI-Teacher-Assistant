@@ -5,232 +5,192 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Teacher Assistant</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <script src='https://unpkg.com/tesseract.js@5.0.2/dist/tesseract.min.js'></script> <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script> <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.21/mammoth.browser.min.js"></script> <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script> <style>
+    <script src='https://unpkg.com/tesseract.js@5.0.2/dist/tesseract.min.js'></script>
+    <style>
         .correct { background-color: #10b981 !important; color: white; border-color: #10b981; }
         .wrong { background-color: #ef4444 !important; color: white; border-color: #ef4444; }
-        .tab-btn.active { background-color: #059669; color: white; border-color: #059669; }
     </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen">
     <div class="max-w-md mx-auto p-6 space-y-6">
-        <header class="text-center">
+        <header class="text-center relative">
             <h1 class="text-3xl font-black text-emerald-400">K-TUTOR 🎓</h1>
-            <p class="text-slate-400 text-sm">For My Vietnamese Student</p>
+            <p class="text-slate-400 text-sm">호랑이 선생님 모드 🐯</p>
         </header>
 
-        <details class="bg-slate-800 rounded-xl border border-slate-700">
-            <summary class="p-3 text-xs text-slate-500 cursor-pointer">⚙️ API Settings</summary>
-            <div class="p-4">
-                <input type="password" id="apiKey" placeholder="Groq API Key" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-2 text-sm focus:border-emerald-500 focus:outline-none">
-            </div>
-        </details>
-
-        <section class="bg-slate-800 rounded-2xl shadow-xl border border-slate-700 overflow-hidden">
-            <div class="flex border-b border-slate-700 text-sm">
-                <button onclick="switchTab('text')" id="tab-text" class="tab-btn active flex-1 py-3 text-center text-slate-400 hover:text-white transition">📝 텍스트</button>
-                <button onclick="switchTab('file')" id="tab-file" class="tab-btn flex-1 py-3 text-center text-slate-400 hover:text-white transition">📁 파일/사진</button>
+        <section class="bg-slate-800 p-5 rounded-2xl shadow-xl border border-slate-700">
+            <h2 class="text-sm font-bold text-emerald-400 mb-3">📈 이번 주 학습 진행도 (Tiến độ tuần này)</h2>
+            <div class="bg-slate-900 p-4 rounded-xl border border-slate-700">
+                <div class="flex justify-between text-xs text-slate-400 mb-2">
+                    <span>학습일: <span id="progDays" class="text-white font-bold text-sm">0</span> / 7일</span>
+                    <span>평균 정답률: <span id="progRate" class="text-white font-bold text-sm">0</span>%</span>
+                </div>
+                <div class="w-full bg-slate-700 rounded-full h-2.5 mb-3 overflow-hidden">
+                    <div id="progBar" class="bg-gradient-to-r from-emerald-500 to-blue-500 h-2.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+                <p id="progMessage" class="text-xs text-slate-400 italic text-center">아직 기록이 없습니다. 오늘 학습을 시작하세요!</p>
             </div>
             
-            <div class="p-6">
-                <div id="input-text" class="block">
-                    <textarea id="textContent" rows="4" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-sm text-slate-300 focus:outline-none focus:border-emerald-500" placeholder="공부할 내용을 복사해서 붙여넣으세요..."></textarea>
-                    <button onclick="processInput('text')" class="w-full mt-3 bg-emerald-600 hover:bg-emerald-500 p-3 rounded-xl font-bold transition-all shadow-lg">분석 시작하기</button>
-                </div>
-
-                <div id="input-file" class="hidden space-y-4">
-                    <label class="block cursor-pointer group">
-                        <div class="bg-slate-900 border border-dashed border-slate-500 group-hover:border-emerald-500 p-6 rounded-xl text-center transition-all">
-                            <span class="block text-2xl mb-2">📸 / 📄</span>
-                            <span class="text-sm text-slate-400 group-hover:text-emerald-400">사진 촬영 또는 파일 업로드<br>(PDF, Word, Excel, CSV 등)</span>
-                        </div>
-                        <input type="file" id="fileInput" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.json" capture="environment" class="hidden">
-                    </label>
-                </div>
-            </div>
-        </section>
-
-        <section id="analysisSection" class="hidden bg-slate-800 p-6 rounded-2xl shadow-xl border border-emerald-500/50 relative overflow-hidden">
-            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 to-blue-500"></div>
-            <h2 class="text-sm font-bold text-emerald-400 mb-2">🤖 AI가 파악한 학습 내용</h2>
-            <div id="aiSummary" class="text-sm text-slate-300 leading-relaxed mb-4 bg-slate-900 p-4 rounded-lg">분석 대기 중...</div>
-            
-            <button onclick="generateQuiz()" id="genBtn" class="w-full bg-blue-600 hover:bg-blue-500 p-4 rounded-xl font-bold transition-all disabled:opacity-50 text-white shadow-lg">
-                🚀 실전 퀴즈 10문제 출제하기
+            <button onclick="generateWeeklyReport()" id="reportBtn" class="w-full mt-4 bg-purple-600 hover:bg-purple-500 p-3 rounded-xl font-bold transition-all shadow-lg text-sm hidden">
+                📊 일주일 주간 성적표 & 잔소리 듣기 (1000자)
             </button>
         </section>
 
-        <div id="loadingStatus" class="hidden text-center text-sm font-bold text-yellow-400 animate-pulse">처리 중입니다... 잠시만 기다려주세요!</div>
+        <section class="bg-slate-800 p-5 rounded-2xl shadow-xl border border-red-500/50">
+            <h2 class="text-sm font-bold text-red-400 mb-3">🔥 오늘의 학습 할당량 (Chỉ tiêu hôm nay)</h2>
+            <div class="flex justify-between items-center mb-3 text-sm">
+                <span class="text-slate-300">오늘의 기본 문제:</span>
+                <span class="font-bold text-emerald-400">10개</span>
+            </div>
+            <div class="flex justify-between items-center mb-4 text-sm">
+                <span class="text-slate-300">밀린 이월 문제 (No Mercy):</span>
+                <span id="penaltyCount" class="font-bold text-red-400 text-lg">0개</span>
+            </div>
+            <div class="h-px bg-slate-700 w-full mb-4"></div>
+            <div class="flex justify-between items-center font-bold text-xl">
+                <span>총 출제량:</span>
+                <span id="totalQuizCount" class="text-yellow-400">10개</span>
+            </div>
+        </section>
+
+        <details class="bg-slate-800 rounded-xl border border-slate-700">
+            <summary class="p-3 text-xs text-slate-500 cursor-pointer">⚙️ API Settings & Dev Tools</summary>
+            <div class="p-4 space-y-3">
+                <input type="password" id="apiKey" placeholder="Groq API Key" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-2 text-sm focus:border-emerald-500">
+                <button onclick="simulateNextDay()" class="w-full bg-slate-700 p-2 rounded text-xs text-slate-300 hover:bg-slate-600 transition">[테스트용] +1일 타임머신 (하루 결석 처리)</button>
+            </div>
+        </details>
+
+        <section class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-xl">
+            <textarea id="rawContent" rows="3" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-sm text-slate-300 focus:outline-none focus:border-emerald-500" placeholder="학습할 텍스트를 입력하거나 복사해서 넣으세요..."></textarea>
+            <button onclick="generateQuiz()" id="genBtn" class="w-full mt-3 bg-blue-600 hover:bg-blue-500 p-4 rounded-xl font-bold transition-all text-white shadow-lg">
+                🚀 <span id="btnQuizCount">10</span>문제 출제하기
+            </button>
+        </section>
+
+        <div id="naggingSection" class="hidden bg-red-900/40 p-6 rounded-2xl border border-red-500/50 shadow-xl">
+            <h3 class="text-xl font-bold text-red-400 mb-2">🤬 40년 베테랑의 팩폭 진단</h3>
+            <div id="naggingText" class="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap"></div>
+        </div>
 
         <div id="quizContainer" class="space-y-6 pb-10"></div>
     </div>
 
     <script>
-        // PDF.js 워커 세팅
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-
-        // UI 요소
-        const fileInput = document.getElementById('fileInput');
-        const textContent = document.getElementById('textContent');
-        const analysisSection = document.getElementById('analysisSection');
-        const aiSummary = document.getElementById('aiSummary');
-        const loadingStatus = document.getElementById('loadingStatus');
-        const quizContainer = document.getElementById('quizContainer');
-        const genBtn = document.getElementById('genBtn');
-        
-        let cleanedContext = ""; // AI가 정리한 핵심 내용 저장용 변수
-
-        // 키 자동 로드
-        document.getElementById('apiKey').value = localStorage.getItem('groq_key') || '';
-
-        // 탭 전환 로직
-        function switchTab(tabId) {
-            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active', 'text-white'));
-            document.getElementById(`tab-${tabId}`).classList.add('active', 'text-white');
-            
-            document.getElementById('input-text').classList.add('hidden');
-            document.getElementById('input-file').classList.add('hidden');
-            document.getElementById(`input-${tabId}`).classList.remove('hidden');
-        }
-
-        // --- [핵심 1] 만능 파일 파서 ---
-        fileInput.onchange = async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            showLoading("⏳ 파일을 읽고 있습니다... (Đang đọc file...)");
-            analysisSection.classList.add('hidden');
-            quizContainer.innerHTML = '';
-            let rawText = "";
-
-            try {
-                const ext = file.name.split('.').pop().toLowerCase();
-                
-                if (file.type.startsWith('image/')) {
-                    // 1. 이미지 (Tesseract)
-                    const result = await Tesseract.recognize(file, 'kor+eng');
-                    rawText = result.data.text;
-                } else if (ext === 'pdf') {
-                    // 2. PDF
-                    const arrayBuffer = await file.arrayBuffer();
-                    const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
-                    for (let i = 1; i <= pdf.numPages; i++) {
-                        const page = await pdf.getPage(i);
-                        const textContent = await page.getTextContent();
-                        rawText += textContent.items.map(item => item.str).join(' ') + " ";
-                    }
-                } else if (ext === 'docx' || ext === 'doc') {
-                    // 3. Word
-                    const arrayBuffer = await file.arrayBuffer();
-                    const result = await mammoth.extractRawText({arrayBuffer: arrayBuffer});
-                    rawText = result.value;
-                } else if (['xls', 'xlsx', 'csv'].includes(ext)) {
-                    // 4. Excel / CSV
-                    const arrayBuffer = await file.arrayBuffer();
-                    const workbook = XLSX.read(arrayBuffer, {type: 'array'});
-                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                    rawText = XLSX.utils.sheet_to_csv(firstSheet);
-                } else {
-                    // 5. TXT, JSON 등 일반 텍스트
-                    rawText = await file.text();
-                }
-
-                if(rawText.trim().length < 5) throw new Error("텍스트를 찾을 수 없습니다.");
-                
-                // 텍스트 추출 완료 후 AI 요약으로 넘김
-                await analyzeWithAI(rawText);
-
-            } catch (err) {
-                console.error(err);
-                hideLoading();
-                alert("파일을 읽는 중 오류가 발생했습니다. 사진이 너무 흐리거나 지원하지 않는 형식일 수 있습니다.");
-            }
+        // --- [상태 관리: 로컬 스토리지 데이터베이스] ---
+        let appState = JSON.parse(localStorage.getItem('ktutor_state')) || {
+            lastLoginDate: new Date().toDateString(),
+            missedDays: 0,
+            quizHistory: [] // [{date: '...', score: 8, total: 10}]
         };
 
-        // 텍스트 수동 입력 처리
-        function processInput(type) {
-            if(type === 'text') {
-                const text = textContent.value;
-                if(!text.trim()) return alert("내용을 입력해주세요!");
-                analysisSection.classList.add('hidden');
-                quizContainer.innerHTML = '';
-                analyzeWithAI(text);
+        const apiKeyInput = document.getElementById('apiKey');
+        const penaltyCountEl = document.getElementById('penaltyCount');
+        const totalQuizCountEl = document.getElementById('totalQuizCount');
+        const btnQuizCountEl = document.getElementById('btnQuizCount');
+        const reportBtn = document.getElementById('reportBtn');
+        
+        let currentTotalQuizzes = 10;
+        let scoreCounter = 0;
+
+        // --- 초기화, 프로그레스 바 및 타임머신 로직 ---
+        function initApp() {
+            apiKeyInput.value = localStorage.getItem('groq_key') || '';
+            
+            const today = new Date().toDateString();
+            if (appState.lastLoginDate !== today) {
+                const daysDiff = Math.floor((new Date(today) - new Date(appState.lastLoginDate)) / (1000 * 60 * 60 * 24));
+                if (daysDiff > 0) {
+                    appState.missedDays += daysDiff;
+                    appState.lastLoginDate = today;
+                    saveState();
+                }
+            }
+
+            // 누적 계산 (기본 10 + 결석일 * 10, 최대 30개 제한)
+            currentTotalQuizzes = 10 + (appState.missedDays * 10);
+            if(currentTotalQuizzes > 30) currentTotalQuizzes = 30; 
+
+            penaltyCountEl.innerText = `${appState.missedDays * 10}개`;
+            totalQuizCountEl.innerText = `${currentTotalQuizzes}개`;
+            btnQuizCountEl.innerText = currentTotalQuizzes;
+
+            updateProgressUI();
+
+            // 주간 성적표 버튼 표시 조건 (히스토리가 7일치 찼거나 결석 누적이 심할 때)
+            if (appState.quizHistory.length >= 7 || appState.missedDays >= 7) {
+                reportBtn.classList.remove('hidden');
             }
         }
 
-        // --- [핵심 2] 외계어 번역 및 내용 요약 AI ---
-        async function analyzeWithAI(rawText) {
-            const key = document.getElementById('apiKey').value;
-            if (!key) return alert("API 키를 먼저 입력해주세요!");
+        // 진행도 UI 업데이트 함수
+        function updateProgressUI() {
+            const history = appState.quizHistory;
+            const daysStudied = history.length;
+            let totalQ = 0;
+            let totalCorrect = 0;
+
+            history.forEach(h => {
+                totalQ += h.total;
+                totalCorrect += h.score;
+            });
+
+            const accuracy = totalQ === 0 ? 0 : Math.round((totalCorrect / totalQ) * 100);
+            const progressPercent = Math.min((daysStudied / 7) * 100, 100);
+
+            document.getElementById('progDays').innerText = daysStudied;
+            document.getElementById('progRate').innerText = accuracy;
+            document.getElementById('progBar').style.width = `${progressPercent}%`;
+
+            const progMessage = document.getElementById('progMessage');
+            if (daysStudied === 0) {
+                progMessage.innerText = "이번 주 첫 학습을 시작해볼까요? (Bắt đầu học nào!)";
+            } else if (daysStudied < 7) {
+                progMessage.innerText = `잘하고 있어요! ${7 - daysStudied}일만 더 채워보세요. (Cố lên!)`;
+            } else {
+                progMessage.innerText = "🎉 일주일 목표 달성! 아래에서 주간 평가를 확인하세요.";
+                progMessage.classList.add('text-emerald-400');
+            }
+        }
+
+        function saveState() {
+            localStorage.setItem('ktutor_state', JSON.stringify(appState));
+        }
+
+        function simulateNextDay() {
+            appState.lastLoginDate = new Date(new Date().getTime() - (24 * 60 * 60 * 1000)).toDateString(); 
+            saveState();
+            location.reload();
+        }
+
+        initApp();
+
+        // --- [퀴즈 생성 엔진] ---
+        async function generateQuiz() {
+            const key = apiKeyInput.value;
+            const content = document.getElementById('rawContent').value;
+            if (!key || !content.trim()) return alert("API 키와 텍스트를 확인하세요!");
             localStorage.setItem('groq_key', key);
 
-            showLoading("🤖 AI가 내용을 파악하고 외계어를 교정 중입니다...");
-
-            const systemPrompt = `당신은 똑똑한 한국어 교사입니다. 
-사용자가 보낸 텍스트는 OCR이나 문서에서 추출되어 오타나 깨진 글자(외계어)가 섞여 있을 수 있습니다.
-깨진 글자는 무시하고, 문맥을 파악하여 '이 내용이 어떤 한국어 학습(어휘, 문법, 상황 등)을 다루고 있는지' 파악하세요.
-결과는 2~3줄의 깔끔한 한국어 요약과 베트남어 번역으로만 대답하세요. JSON이 아닌 일반 텍스트로 답하세요.`;
-
-            try {
-                const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-                    method: "POST",
-                    headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        model: "llama-3.3-70b-versatile",
-                        messages: [
-                            { role: "system", content: systemPrompt }, 
-                            { role: "user", content: `다음 텍스트를 정리해주세요:\n\n${rawText.substring(0, 3000)}` } // 너무 긴 문서 방지
-                        ],
-                        temperature: 0.3
-                    })
-                });
-
-                const data = await res.json();
-                cleanedContext = data.choices[0].message.content; // 정리된 내용을 변수에 저장 (퀴즈 출제용)
-                
-                hideLoading();
-                aiSummary.innerText = cleanedContext;
-                analysisSection.classList.remove('hidden');
-
-            } catch (err) {
-                hideLoading();
-                alert("AI 분석 중 오류가 발생했습니다.");
-            }
-        }
-
-        // --- [핵심 3] 실전 퀴즈 생성 (회색 글씨 제거 완료!) ---
-        async function generateQuiz() {
-            const key = document.getElementById('apiKey').value;
-            
-            genBtn.innerText = "👨‍🏫 문제 출제 중... ⏳";
+            const genBtn = document.getElementById('genBtn');
+            genBtn.innerText = `👨‍🏫 ${currentTotalQuizzes}문제 출제 중... ⏳`;
             genBtn.disabled = true;
-            quizContainer.innerHTML = '';
+            document.getElementById('quizContainer').innerHTML = '';
+            scoreCounter = 0;
 
-            // q_kr 완전 삭제, 오직 q_vn과 options(한국어)만 남김
-            const systemPrompt = `당신은 40년 경력의 베테랑 한국어 교사입니다. 학생은 베트남인입니다.
-제가 제공하는 '요약된 학습 내용'을 바탕으로, 아래 3가지 유형 중 하나를 골라 총 10문제를 출제하세요.
+            const systemPrompt = `당신은 40년 경력의 무서운 호랑이 한국어 교사입니다. 학생은 베트남인입니다.
 
-[★언어 분리 절대 규칙★ - 시스템 경고: 이 규칙을 어기면 심각한 오류가 발생합니다]
-1. 질문(q_vn): 무조건 100% '베트남어(Vietnamese)'로만 작성하세요. 상황 설명도 모두 베트남어입니다.
-2. 보기(options): 무조건 100% '한국어(Korean)'로만 작성하세요. 보기에 베트남어, 영어, 알파벳이 단 한 글자라도 섞이면 절대 안 됩니다.
-3. 해설(exp): 무조건 100% '베트남어(Vietnamese)'로만 작성하세요.
+[★언어 분리 절대 규칙★]
+1. q_vn: 100% 베트남어로 질문 및 상황 설명 (빈칸 문제일 경우에만 한국어 텍스트 일부 포함)
+2. options: 100% 한국어로만 작성 (4개 보기)
+3. exp: 100% 베트남어로 해설 작성
 
-[출제 유형]
-1. 상황 대처: 베트남어로 상황을 설명하고, 가장 알맞은 '한국어' 대사를 고르게 하세요.
-2. 빈칸 채우기: 베트남어로 문맥을 설명하고, 빈칸(____)이 있는 '한국어' 문장을 제시하여 알맞은 '한국어' 단어를 고르게 하세요.
-3. 의도 파악: 베트남어로 "이 한국어 문장은 어떤 상황에 쓰이나요?"라고 묻고, 보기를 구성하세요.
+[출제 지침]
+- 상황 대처, 빈칸 채우기, 의도 파악 3가지 유형을 섞어서 출제하세요.
+- 무조건 '정확히 ${currentTotalQuizzes}문제'를 다 채워야 합니다.
 
 [JSON 구조]
-{
-  "questions": [
-    {
-      "q_vn": "베트남어 질문 (Vietnamese ONLY)",
-      "options": ["오직 한국어", "오직 한국어", "오직 한국어", "오직 한국어"],
-      "a": 0,
-      "exp": "베트남어 해설 (Vietnamese ONLY)"
-    }
-  ]
-}`;
+{ "questions": [ { "q_vn": "...", "options": ["..","..","..",".."], "a": 0, "exp": "..." } ] }`;
 
             try {
                 const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -238,78 +198,127 @@
                     headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
                     body: JSON.stringify({
                         model: "llama-3.3-70b-versatile",
-                        messages: [
-                            { role: "system", content: systemPrompt }, 
-                            { role: "user", content: `다음 학습 내용을 바탕으로 10문제를 내주세요:\n\n${cleanedContext}` }
-                        ],
+                        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: content }],
                         response_format: { type: "json_object" },
                         temperature: 0.4, 
-                        max_tokens: 6000
+                        max_tokens: 8000
                     })
                 });
 
                 const data = await res.json();
-                
-                if (data.choices && data.choices[0].message.content) {
-                    const json = JSON.parse(data.choices[0].message.content);
-                    renderQuiz(json.questions);
-                }
+                const json = JSON.parse(data.choices[0].message.content);
+                renderQuiz(json.questions);
             } catch (err) {
-                console.error(err);
-                alert("AI 출제 중 오류가 발생했습니다.");
+                alert("오류 발생!");
             } finally {
-                genBtn.innerText = "🚀 실전 퀴즈 10문제 출제하기";
+                genBtn.innerText = `🚀 ${currentTotalQuizzes}문제 출제하기`;
                 genBtn.disabled = false;
             }
         }
 
-        // 퀴즈 렌더링 (q_kr 삭제, q_vn만 렌더링)
         function renderQuiz(questions) {
+            const container = document.getElementById('quizContainer');
             questions.forEach((q, qIdx) => {
                 const qDiv = document.createElement('div');
                 qDiv.className = "bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-lg animate-fade-in";
                 
                 let optionsHtml = q.options.map((opt, oIdx) => `
-                    <button onclick="checkAnswer(this, ${qIdx}, ${oIdx}, ${q.a}, '${q.exp.replace(/'/g, "\\'")}')" 
-                            class="w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-700 hover:border-emerald-500 transition-all text-base mb-2 font-medium">
+                    <button onclick="handleAnswer(this, ${qIdx}, ${oIdx}, ${q.a}, '${q.exp.replace(/'/g, "\\'")}', ${questions.length})" 
+                            class="w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-700 hover:border-emerald-500 mb-2 font-medium">
                         ${oIdx + 1}. ${opt}
                     </button>
                 `).join('');
 
                 qDiv.innerHTML = `
-                    <p class="font-bold text-lg mb-4 text-emerald-100 leading-relaxed">${qIdx + 1}. ${q.q_vn}</p>
+                    <p class="font-bold text-lg mb-4 text-emerald-100">${qIdx + 1}. ${q.q_vn}</p>
                     <div id="q-${qIdx}-options">${optionsHtml}</div>
-                    <div id="q-${qIdx}-feedback" class="hidden mt-3 text-xs p-4 rounded-xl bg-slate-900 border-l-4 border-emerald-500 text-slate-300 leading-relaxed shadow-inner"></div>
+                    <div id="q-${qIdx}-feedback" class="hidden mt-3 text-xs p-4 rounded-xl bg-slate-900 border-l-4 border-emerald-500 text-slate-300 leading-relaxed"></div>
                 `;
-                quizContainer.appendChild(qDiv);
+                container.appendChild(qDiv);
             });
         }
 
-        function checkAnswer(btn, qIdx, selected, correct, explanation) {
+        function handleAnswer(btn, qIdx, selected, correct, explanation, totalQ) {
             const optionsDiv = document.getElementById(`q-${qIdx}-options`);
             const feedbackDiv = document.getElementById(`q-${qIdx}-feedback`);
             const buttons = optionsDiv.querySelectorAll('button');
-
             buttons.forEach(b => b.disabled = true);
 
             if (selected === correct) {
                 btn.classList.add('correct');
-                feedbackDiv.innerHTML = `<span class="text-emerald-400 text-base">✅ <strong>Chính xác! (정답!)</strong></span><br><br>${explanation}`;
+                feedbackDiv.innerHTML = `<span class="text-emerald-400 text-base">✅ <strong>Chính xác!</strong></span><br><br>${explanation}`;
+                scoreCounter++;
             } else {
                 btn.classList.add('wrong');
                 buttons[correct].classList.add('correct');
-                feedbackDiv.innerHTML = `<span class="text-red-400 text-base">❌ <strong>Sai rồi! (틀렸어요!)</strong></span><br><br>${explanation}`;
+                feedbackDiv.innerHTML = `<span class="text-red-400 text-base">❌ <strong>Sai rồi!</strong></span><br><br>${explanation}`;
             }
             feedbackDiv.classList.remove('hidden');
+
+            // 마지막 문제 풀이 완료 시
+            if (document.querySelectorAll('.correct, .wrong').length === totalQ) {
+                appState.quizHistory.push({ date: new Date().toDateString(), score: scoreCounter, total: totalQ });
+                appState.missedDays = 0; // 결석 초기화
+                saveState();
+                
+                setTimeout(() => {
+                    alert(`수고하셨습니다! 총 ${totalQ}문제 중 ${scoreCounter}문제 정답!\n밀린 이월 문제가 초기화되고 진행도가 업데이트되었습니다.`);
+                    location.reload();
+                }, 500);
+            }
         }
 
-        // 유틸리티 함수
-        function showLoading(msg) {
-            loadingStatus.innerText = msg;
-            loadingStatus.classList.remove('hidden');
-        }
-        function hideLoading() {
-            loadingStatus.classList.add('hidden');
+        // --- [일주일 주간 성적표 & 1000자 잔소리 엔진] ---
+        async function generateWeeklyReport() {
+            const key = apiKeyInput.value;
+            if (!key) return;
+
+            const btn = document.getElementById('reportBtn');
+            btn.innerText = "🤬 선생님이 잔소리를 작성 중입니다... ⏳";
+            btn.disabled = true;
+
+            const historyText = appState.quizHistory.map(h => `- ${h.date}: ${h.total}문제 중 ${h.score}개 정답`).join('\n');
+            const systemPrompt = `당신은 40년 경력의 매우 엄격하지만 학생을 아끼는 한국어 교사입니다. 학생은 베트남인입니다.
+학생의 일주일치 퀴즈 성적과 결석 데이터가 제공됩니다. 이를 바탕으로 '베트남어'로 1000자 이상의 장문 편지(잔소리)를 작성하세요.
+
+[필수 포함 내용]
+1. 팩폭 진단: 정답률과 성실도를 지적하세요. (예: "머리는 좋은데 노력을 안 한다", "몰아서 푸는 건 최악이다" 등)
+2. 구체적인 학습 방향: 다음 주 집중해야 할 부분을 전문적으로 조언하세요.
+3. 츤데레 마무리: 혼내기만 하지 말고 마지막엔 따뜻하게 응원해주세요.
+4. 오직 '베트남어'로만 1000자 분량으로 작성하세요.`;
+
+            try {
+                const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                    method: "POST",
+                    headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        model: "llama-3.3-70b-versatile",
+                        messages: [
+                            { role: "system", content: systemPrompt }, 
+                            { role: "user", content: `다음은 학생의 일주일 성적표입니다:\n결석 일수 누적 기록: ${appState.missedDays}일 (현재 리셋됨)\n성적 히스토리:\n${historyText}` }
+                        ],
+                        temperature: 0.7 
+                    })
+                });
+
+                const data = await res.json();
+                const reportContent = data.choices[0].message.content;
+                
+                document.getElementById('naggingSection').classList.remove('hidden');
+                document.getElementById('naggingText').innerText = reportContent;
+                
+                if(confirm("잔소리를 다 읽으셨나요? 확인을 누르면 지난주 성적 기록이 모두 초기화되고 새로운 주간이 시작됩니다.")) {
+                    appState.quizHistory = [];
+                    saveState();
+                    updateProgressUI();
+                }
+
+            } catch (err) {
+                alert("잔소리 생성 중 오류 발생!");
+            } finally {
+                btn.innerText = "📊 일주일 주간 성적표 & 잔소리 듣기 (1000자)";
+                btn.disabled = false;
+            }
         }
     </script>
 </body>
