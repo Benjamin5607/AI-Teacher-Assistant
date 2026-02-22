@@ -40,7 +40,7 @@
             <div class="p-4 space-y-4">
                 <textarea id="rawContent" rows="4" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-sm text-slate-300 focus:outline-none focus:border-emerald-500" placeholder="추출된 글자가 나타납니다. 오타가 있다면 살짝 수정해주세요!"></textarea>
                 <button onclick="generateQuiz()" id="genBtn" class="w-full bg-blue-600 hover:bg-blue-500 p-4 rounded-xl font-bold transition-all disabled:opacity-50 text-white shadow-lg">
-                    🚀 3. 이 내용으로 10문제 출제하기
+                    🚀 3. 실전 어학 10문제 출제하기
                 </button>
             </div>
         </details>
@@ -75,7 +75,7 @@
             }
         };
 
-        // 2. Groq API 호출 (어학 시험 3대장 모드)
+        // 2. Groq API 호출 (사용자 맞춤형 언어 분리 프롬프트)
         async function generateQuiz() {
             const key = document.getElementById('apiKey').value;
             localStorage.setItem('groq_key', key);
@@ -91,28 +91,32 @@
             status.innerText = "문제 출제 중입니다...";
             quizContainer.innerHTML = '';
 
-            // [핵심 변경] 사용자의 아이디어를 완벽히 반영한 프롬프트
+            // [핵심 변경] 베트남어 메인 질문 -> 한국어 서브 질문 -> 한국어 보기
             const systemPrompt = `당신은 40년 경력의 베테랑 한국어 교사입니다. 학생은 베트남인입니다.
-아래의 [출제 유형] 3가지 중 하나를 골라, 총 10문제를 구성하세요. 교재의 문장을 그대로 복사하는 것은 절대 금지입니다.
+아래의 [출제 유형] 3가지 중 하나를 골라, 총 10문제를 구성하세요. 본문을 그대로 복사하는 것은 절대 금지입니다.
 
 [출제 유형 - 이 3가지 외에는 출제 불가]
-1. 상황에 맞는 문장 찾기: 베트남어로 특정 상황을 제시하고, 이 상황에서 할 가장 알맞은 한국어 대사를 고르게 하세요.
-2. 빈칸 채우기: 한국어 문장 중간에 빈칸(____)을 뚫어놓고, 문맥에 맞는 알맞은 단어나 동사/문법을 고르게 하세요. 질문에 베트남어 뜻을 병기하세요.
-3. 문장의 의도 파악: 한국어 문장을 제시하고, 이 문장이 어떤 상황이나 의도로 쓰이는지 고르게 하세요.
+1. 상황에 맞는 문장 찾기: 베트남어로 상황을 설명하고, 그 상황에 맞는 한국어 대사를 고르게 하세요.
+2. 빈칸 채우기: 베트남어로 문맥을 설명하고, 빈칸(____)이 있는 한국어 문장을 제시한 뒤 알맞은 한국어 단어/동사를 고르게 하세요.
+3. 문장의 의도 파악: 한국어 문장을 제시하고, 이 문장이 어떤 상황에 쓰이는지 한국어로 설명된 보기를 고르게 하세요. (질문은 베트남어로)
 
-[절대 규칙]
-1. 언어 제한: 오직 '한국어'와 '베트남어'만 사용하세요. 태국어, 아랍어, 영어, 발음 기호(Romanization)는 절대 금지입니다.
-2. 문항 수: 무조건 '정확히 10문제'를 출제해야 합니다.
-3. 해설(exp): 베트남어로 작성하며, 왜 정답인지 40년 베테랑의 노하우를 담아 명확히 설명하세요.
+[언어 및 형식 절대 규칙]
+1. q_vn(메인 질문): 반드시 '베트남어'로만 상황이나 문제를 설명하세요.
+2. q_kr(서브 질문): 위 베트남어 질문의 '한국어 번역'이거나, 빈칸이 뚫린 '한국어 지문'을 넣으세요.
+3. options(보기): 4개의 보기는 무조건 100% '한국어'로만 작성하세요. 베트남어 힌트 금지.
+4. 금지어: 태국어, 아랍어, 영어, 발음 기호(Romanization) 절대 사용 금지.
+5. 문항 수: 무조건 정확히 10문제.
+6. exp(해설): 베트남어로 상세히 설명하세요.
 
 [JSON 구조 가이드]
 {
   "questions": [
     {
-      "q": "질문 (한국어 + 베트남어 뜻 병기)",
+      "q_vn": "베트남어로 된 메인 질문 및 상황 설명",
+      "q_kr": "한국어로 번역된 질문 또는 빈칸이 포함된 한국어 지문",
       "options": ["한국어 보기 1", "한국어 보기 2", "한국어 보기 3", "한국어 보기 4"],
       "a": 0,
-      "exp": "베트남어 해설 (알파벳 발음 표기 절대 금지)"
+      "exp": "베트남어 해설"
     }
   ]
 }`;
@@ -128,7 +132,7 @@
                             { role: "user", content: `오늘의 교재 내용이다. 이 내용을 바탕으로 영어 발음 표기 없이 정확히 10문제를 내거라: ${content}` }
                         ],
                         response_format: { type: "json_object" },
-                        temperature: 0.4, // 창의성 억제, 규칙 엄수를 위해 0.4로 세팅
+                        temperature: 0.4, 
                         max_tokens: 6000
                     })
                 });
@@ -154,26 +158,29 @@
                 status.innerText = "❌ 퀴즈 생성 중 오류 발생! 다시 시도해주세요.";
                 alert("AI 출제 중 오류가 발생했습니다. 개발자 도구 콘솔을 확인해주세요.");
             } finally {
-                genBtn.innerText = "🚀 이 내용으로 10문제 출제하기";
+                genBtn.innerText = "🚀 실전 어학 10문제 출제하기";
                 genBtn.disabled = false;
             }
         }
 
-        // 3. 퀴즈 앱 화면 렌더링
+        // 3. 퀴즈 앱 화면 렌더링 (UI 로직 변경)
         function renderQuiz(questions) {
             questions.forEach((q, qIdx) => {
                 const qDiv = document.createElement('div');
                 qDiv.className = "bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-lg animate-fade-in";
                 
+                // 보기는 무조건 한국어
                 let optionsHtml = q.options.map((opt, oIdx) => `
                     <button onclick="checkAnswer(this, ${qIdx}, ${oIdx}, ${q.a}, '${q.exp.replace(/'/g, "\\'")}')" 
-                            class="w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-700 hover:border-emerald-500 transition-all text-sm mb-2">
+                            class="w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-700 hover:border-emerald-500 transition-all text-sm mb-2 font-medium">
                         ${oIdx + 1}. ${opt}
                     </button>
                 `).join('');
 
+                // q_vn(베트남어)는 크고 굵게, q_kr(한국어 지문/번역)는 작고 흐리게
                 qDiv.innerHTML = `
-                    <p class="font-bold text-lg mb-4 text-emerald-100">${qIdx + 1}. ${q.q}</p>
+                    <p class="font-bold text-lg mb-1 text-emerald-100">${qIdx + 1}. ${q.q_vn}</p>
+                    <p class="text-sm text-slate-400 mb-5 break-keep">${q.q_kr}</p>
                     <div id="q-${qIdx}-options">${optionsHtml}</div>
                     <div id="q-${qIdx}-feedback" class="hidden mt-3 text-xs p-4 rounded-xl bg-slate-900 border-l-4 border-emerald-500 text-slate-300 leading-relaxed shadow-inner"></div>
                 `;
