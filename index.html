@@ -73,7 +73,7 @@
             }
         };
 
-        // 2. Groq API 호출
+        // 2. Groq API 호출 (40년 베테랑 강사 모드)
         async function generateQuiz() {
             const key = document.getElementById('apiKey').value;
             localStorage.setItem('groq_key', key);
@@ -81,11 +81,21 @@
             const content = rawContent.value;
             if (!key || !content) return;
 
-            status.innerText = "🤖 AI 선생님 문제 출제 중...";
+            status.innerText = "👨‍🏫 40년 경력 베테랑 강사가 문제를 분석 중...";
             quizContainer.innerHTML = '';
 
-            const systemPrompt = `You are a Korean teacher. Create 10 quizzes for a Vietnamese student.
-            Format: JSON { "questions": [{ "q": "Question", "options": ["1","2","3","4"], "a": 0, "exp": "Explanation in Vietnamese" }] }`;
+            // 페르소나와 출제 지침을 강화한 시스템 프롬프트
+            const systemPrompt = `당신은 외국인에게 한국어를 40년 동안 가르쳐온 '베테랑 한국어 강사'입니다.
+주어진 텍스트를 분석하여, 학생이 단순히 단어를 외우는 것이 아니라 문맥과 한국어의 미묘한 차이를 깨닫게 하는 '최고의 10문제'를 만드세요.
+
+[출제 지침]
+1. 분석적 출제: 단순 복사가 아니라, 텍스트의 핵심 문법과 베트남인이 자주 틀리는 조사/어미를 공략하세요.
+2. 실전 뉘앙스: 한국인이 실생활에서 사용하는 자연스러운 표현 위주로 질문을 구성하세요.
+3. 친절한 베테랑: 해설(exp)은 베트남어로 작성하되, 40년 내공이 느껴지는 깊이 있는 조언을 담아주세요.
+4. 모든 질문(q)은 한국어 질문 뒤에 베트남어 뜻을 괄호 안에 병기하세요.
+
+[JSON 형식]
+{ "questions": [{ "q": "질문 (의미)", "options": ["1","2","3","4"], "a": 0, "exp": "베트남어로 된 베테랑의 족집게 해설" }] }`;
 
             try {
                 const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -93,17 +103,30 @@
                     headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
                     body: JSON.stringify({
                         model: "llama-3.3-70b-versatile",
-                        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: content }],
-                        response_format: { type: "json_object" }
+                        messages: [
+                            { role: "system", content: systemPrompt }, 
+                            { role: "user", content: `오늘의 교재 내용이다. 이 내용을 바탕으로 최고의 문제를 내거라: ${content}` }
+                        ],
+                        response_format: { type: "json_object" },
+                        temperature: 0.7, // 약간의 창의성을 주어 더 좋은 문제를 내게 함
+                        max_tokens: 4096
                     })
                 });
 
                 const data = await res.json();
-                const json = JSON.parse(data.choices[0].message.content);
-                renderQuiz(json.questions);
-                status.innerText = "✨ 오늘의 퀴즈 완성!";
+                
+                // Groq API 응답 구조에 맞게 안전하게 파싱
+                if (data.choices && data.choices[0].message.content) {
+                    const json = JSON.parse(data.choices[0].message.content);
+                    renderQuiz(json.questions);
+                    status.innerText = "✨ 베테랑 강사의 족집게 퀴즈 완성!";
+                } else {
+                    throw new Error("Invalid API Response");
+                }
+
             } catch (err) {
-                status.innerText = "❌ AI 퀴즈 생성 실패!";
+                console.error(err);
+                status.innerText = "❌ 퀴즈 생성 중 오류 발생! (API 키나 모델 확인)";
             }
         }
 
