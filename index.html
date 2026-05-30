@@ -12,9 +12,129 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script> 
 
     <style>
+        :root {
+            color-scheme: dark;
+            --panel: rgba(15, 23, 42, 0.76);
+            --panel-strong: rgba(15, 23, 42, 0.92);
+            --line: rgba(148, 163, 184, 0.18);
+            --muted: #94a3b8;
+            --brand: #34d399;
+            --brand-2: #38bdf8;
+        }
+        body {
+            background:
+                radial-gradient(circle at 12% 8%, rgba(52, 211, 153, 0.16), transparent 30%),
+                radial-gradient(circle at 88% 0%, rgba(56, 189, 248, 0.14), transparent 28%),
+                radial-gradient(circle at 50% 100%, rgba(99, 102, 241, 0.12), transparent 34%),
+                #020617;
+        }
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background-image:
+                linear-gradient(rgba(148, 163, 184, 0.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(148, 163, 184, 0.04) 1px, transparent 1px);
+            background-size: 42px 42px;
+            mask-image: linear-gradient(to bottom, black, transparent 82%);
+        }
+        .app-shell {
+            width: min(100%, 980px);
+            margin: 0 auto;
+            padding: 28px 18px 56px;
+            position: relative;
+            z-index: 1;
+        }
+        .hero-panel, .premium-card {
+            background: linear-gradient(145deg, rgba(15, 23, 42, 0.86), rgba(15, 23, 42, 0.66));
+            border: 1px solid var(--line);
+            box-shadow: 0 24px 70px rgba(2, 6, 23, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(18px);
+        }
+        .hero-panel {
+            position: relative;
+            overflow: hidden;
+        }
+        .hero-panel::after {
+            content: "";
+            position: absolute;
+            width: 16rem;
+            height: 16rem;
+            right: -6rem;
+            top: -6rem;
+            border-radius: 999px;
+            background: linear-gradient(135deg, rgba(52, 211, 153, 0.22), rgba(56, 189, 248, 0.16));
+            filter: blur(2px);
+        }
+        .brand-mark {
+            width: 2.8rem;
+            height: 2.8rem;
+            border-radius: 1rem;
+            display: grid;
+            place-items: center;
+            background: linear-gradient(135deg, #34d399, #38bdf8);
+            color: #020617;
+            box-shadow: 0 16px 36px rgba(16, 185, 129, 0.24);
+            font-weight: 900;
+        }
+        .eyebrow {
+            color: #67e8f9;
+            font-size: 0.68rem;
+            font-weight: 900;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+        }
+        .metric-card {
+            background: rgba(2, 6, 23, 0.46);
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            border-radius: 1rem;
+            padding: 0.9rem;
+        }
+        .primary-action, .secondary-action {
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+        }
+        .primary-action {
+            background: linear-gradient(135deg, #10b981, #0ea5e9);
+            box-shadow: 0 18px 36px rgba(14, 165, 233, 0.18);
+        }
+        .primary-action:hover, .secondary-action:hover, .upload-drop:hover {
+            transform: translateY(-1px);
+        }
+        .secondary-action {
+            background: rgba(30, 41, 59, 0.82);
+        }
+        .upload-drop {
+            background:
+                linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(30, 41, 59, 0.7)),
+                radial-gradient(circle at top, rgba(52, 211, 153, 0.14), transparent 55%);
+            border: 1px dashed rgba(125, 211, 252, 0.36);
+            transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+        }
+        .professional-input {
+            background: rgba(2, 6, 23, 0.58);
+            border: 1px solid rgba(148, 163, 184, 0.22);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+        }
+        .professional-input:focus {
+            outline: none;
+            border-color: rgba(56, 189, 248, 0.78);
+            box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.16);
+        }
+        details.premium-card > summary {
+            list-style: none;
+        }
+        details.premium-card > summary::-webkit-details-marker {
+            display: none;
+        }
         .correct { background-color: #10b981 !important; color: white; border-color: #10b981; }
         .wrong { background-color: #ef4444 !important; color: white; border-color: #ef4444; }
-        .tab-btn.active { background-color: #059669; color: white; border-color: #059669; }
+        .tab-btn.active {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.22), rgba(14, 165, 233, 0.16));
+            color: white;
+            border-color: rgba(52, 211, 153, 0.38);
+        }
         .slide-card {
             background: linear-gradient(145deg, #0f172a 0%, #111827 100%);
         }
@@ -70,88 +190,139 @@
         }
     </style>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen">
-    <div class="max-w-md mx-auto p-6 space-y-6">
-        <header class="text-center relative">
-            <h1 class="text-3xl font-black text-emerald-400">K-TUTOR 🎓</h1>
-            <p class="text-slate-400 text-sm">호랑이 선생님 모드 🐯 (1주일 완성)</p>
+<body class="text-slate-100 min-h-screen antialiased">
+    <div class="app-shell space-y-6">
+        <header class="hero-panel rounded-[2rem] p-6 md:p-8">
+            <div class="relative z-10 grid gap-6 md:grid-cols-[1.35fr_0.9fr] md:items-end">
+                <div class="space-y-4">
+                    <div class="flex items-center gap-3">
+                        <div class="brand-mark">AI</div>
+                        <div>
+                            <p class="eyebrow">Education Support Platform</p>
+                            <h1 class="text-3xl md:text-5xl font-black tracking-tight text-white">K-TUTOR Studio</h1>
+                        </div>
+                    </div>
+                    <p class="text-slate-300 text-sm md:text-base leading-relaxed max-w-2xl">
+                        교재, PDF, 스크린샷을 AI가 분석해 비주얼 슬라이드·학습 활동·필수 퀴즈까지 한 번에 구성하는 전문 교육 콘텐츠 제작 도구입니다.
+                    </p>
+                </div>
+                <div class="grid grid-cols-3 gap-2 text-center">
+                    <div class="metric-card">
+                        <p class="text-lg font-black text-emerald-300">OCR</p>
+                        <p class="text-[10px] text-slate-400 mt-1">자료 추출</p>
+                    </div>
+                    <div class="metric-card">
+                        <p class="text-lg font-black text-cyan-300">Deck</p>
+                        <p class="text-[10px] text-slate-400 mt-1">수업 설계</p>
+                    </div>
+                    <div class="metric-card">
+                        <p class="text-lg font-black text-amber-300">Quiz</p>
+                        <p class="text-[10px] text-slate-400 mt-1">필수 평가</p>
+                    </div>
+                </div>
+            </div>
         </header>
 
-        <section class="bg-slate-800 p-5 rounded-2xl shadow-xl border border-slate-700">
-            <h2 class="text-sm font-bold text-emerald-400 mb-3">📈 이번 주 학습 진행도 (Tiến độ tuần này)</h2>
-            <div class="bg-slate-900 p-4 rounded-xl border border-slate-700 mb-3">
+        <section class="premium-card p-5 rounded-3xl">
+            <div class="flex items-center justify-between gap-3 mb-4">
+                <div>
+                    <p class="eyebrow">Learning Analytics</p>
+                    <h2 class="text-lg font-black text-white">이번 주 학습 진행도</h2>
+                </div>
+                <span class="text-[11px] text-slate-400 bg-slate-950/50 border border-slate-700 rounded-full px-3 py-1">Tiến độ tuần này</span>
+            </div>
+            <div class="metric-card mb-3">
                 <div class="flex justify-between text-xs text-slate-400 mb-2">
                     <span>학습일: <span id="progDays" class="text-white font-bold text-sm">0</span> / 7일</span>
                     <span>평균 정답률: <span id="progRate" class="text-white font-bold text-sm">0</span>%</span>
                 </div>
-                <div class="w-full bg-slate-700 rounded-full h-2.5 mb-3 overflow-hidden">
+                <div class="w-full bg-slate-800 rounded-full h-2.5 mb-3 overflow-hidden">
                     <div id="progBar" class="bg-gradient-to-r from-emerald-500 to-blue-500 h-2.5 rounded-full transition-all duration-500" style="width: 0%"></div>
                 </div>
                 <p id="progMessage" class="text-xs text-slate-400 italic text-center">아직 기록이 없습니다. 새로운 교재를 업로드하세요!</p>
             </div>
             
-            <button onclick="generateWeeklyReport()" id="reportBtn" class="w-full bg-purple-600 hover:bg-purple-500 p-3 rounded-xl font-bold transition-all shadow-lg text-sm hidden">
+            <button onclick="generateWeeklyReport()" id="reportBtn" class="hidden w-full secondary-action p-3 rounded-xl font-bold text-sm text-white">
                 📊 일주일 평가 & 잔소리 듣기 (1000자)
             </button>
         </section>
 
-        <section id="currentStudySection" class="hidden bg-slate-800 p-5 rounded-2xl shadow-xl border border-red-500/50">
-            <h2 class="text-sm font-bold text-red-400 mb-2">🔥 현재 학습 중인 내용 및 할당량</h2>
-            <div id="savedMaterialBox" class="text-xs text-slate-300 bg-slate-900 p-3 rounded-lg border border-slate-700 mb-4 h-24 overflow-y-auto leading-relaxed"></div>
-
-            <div id="slideDeckSection" class="hidden mb-4 rounded-2xl border border-emerald-500/40 bg-slate-900/70 p-4 space-y-4">
+        <section id="currentStudySection" class="hidden premium-card p-5 rounded-3xl">
+            <div class="flex items-start justify-between gap-4 mb-4">
                 <div>
-                    <p class="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">AI Slide Lesson</p>
-                    <h3 id="deckTitle" class="text-lg font-black text-white mt-1"></h3>
+                    <p class="eyebrow">Active Curriculum</p>
+                    <h2 class="text-lg font-black text-white">현재 학습 패키지</h2>
+                </div>
+                <span class="text-[11px] text-rose-200 bg-rose-500/10 border border-rose-400/20 rounded-full px-3 py-1">필수 학습</span>
+            </div>
+            <div id="savedMaterialBox" class="text-xs text-slate-300 professional-input rounded-2xl p-4 mb-4 h-24 overflow-y-auto leading-relaxed"></div>
+
+            <div id="slideDeckSection" class="hidden mb-4 rounded-3xl border border-emerald-500/30 bg-slate-950/40 p-4 md:p-5 space-y-4">
+                <div>
+                    <p class="eyebrow">AI Slide Lesson</p>
+                    <h3 id="deckTitle" class="text-xl md:text-2xl font-black text-white mt-1"></h3>
                     <p id="deckSubtitle" class="text-xs text-slate-400 mt-1"></p>
                 </div>
                 <div id="deckMeta" class="text-[11px] text-slate-400 flex flex-wrap gap-2"></div>
-                <div>
+                <div class="metric-card">
                     <h4 class="text-xs font-bold text-emerald-300 mb-2">🎯 학습 목표</h4>
                     <ul id="deckObjectives" class="space-y-1 text-xs text-slate-300 list-disc pl-4"></ul>
                 </div>
                 <div id="slidesContainer" class="space-y-3"></div>
-                <div id="requiredQuizStatus" class="text-xs bg-slate-800 border border-slate-700 rounded-xl p-3"></div>
-                <div class="grid grid-cols-1 gap-2">
-                    <button onclick="startRequiredQuiz()" id="requiredQuizBtn" class="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 p-3 rounded-xl font-black transition-all shadow-lg text-sm">
+                <div id="requiredQuizStatus" class="text-xs bg-slate-950/60 border border-slate-700 rounded-2xl p-3"></div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <button onclick="startRequiredQuiz()" id="requiredQuizBtn" class="w-full bg-amber-400 hover:bg-amber-300 text-slate-950 p-3 rounded-xl font-black transition-all shadow-lg text-sm">
                         📝 필수 체크퀴즈 풀기
                     </button>
-                    <button onclick="printSlideDeck()" class="w-full bg-slate-700 hover:bg-slate-600 p-3 rounded-xl font-bold transition-all shadow-lg text-sm text-white">
+                    <button onclick="printSlideDeck()" class="w-full secondary-action p-3 rounded-xl font-bold text-sm text-white">
                         🖨️ 슬라이드 자료 인쇄/PDF 저장
                     </button>
                 </div>
             </div>
             
-            <div class="flex justify-between items-center text-sm mb-2">
-                <span class="text-slate-300">오늘의 기본 문제:</span><span class="text-emerald-400 font-bold">10개</span>
+            <div class="grid grid-cols-2 gap-3 mb-4">
+                <div class="metric-card">
+                    <p class="text-[11px] text-slate-400">오늘의 기본 문제</p>
+                    <p class="text-xl font-black text-emerald-300 mt-1">10개</p>
+                </div>
+                <div class="metric-card">
+                    <p class="text-[11px] text-slate-400">결석 페널티</p>
+                    <p id="penaltyCount" class="text-xl font-black text-rose-300 mt-1">0개</p>
+                </div>
             </div>
-            <div class="flex justify-between items-center text-sm mb-4">
-                <span class="text-slate-300">결석 페널티 (No Mercy):</span><span id="penaltyCount" class="text-red-400 font-bold">0개</span>
-            </div>
-            <button onclick="generateQuiz()" id="genBtn" class="w-full bg-blue-600 hover:bg-blue-500 p-4 rounded-xl font-bold transition-all text-white shadow-lg">
+            <button onclick="generateQuiz()" id="genBtn" class="w-full primary-action p-4 rounded-2xl font-black text-white">
                 🚀 총 <span id="btnQuizCount">10</span>문제 출제 및 풀기
             </button>
         </section>
 
-        <details id="uploadDetails" class="bg-slate-800 rounded-xl border border-slate-700" open>
-            <summary class="p-3 text-xs text-slate-400 cursor-pointer font-bold">📁 새로운 교재 업로드 (새로운 주간 시작)</summary>
+        <details id="uploadDetails" class="premium-card rounded-3xl overflow-hidden" open>
+            <summary class="p-4 md:p-5 cursor-pointer">
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <p class="eyebrow">Content Intake</p>
+                        <h2 class="text-lg font-black text-white">새로운 교재 업로드</h2>
+                    </div>
+                    <span class="text-[11px] text-slate-400 bg-slate-950/50 border border-slate-700 rounded-full px-3 py-1">새 주간 시작</span>
+                </div>
+            </summary>
             
-            <div class="border-t border-slate-700 text-sm flex">
-                <button onclick="switchTab('text')" id="tab-text" class="tab-btn active flex-1 py-3 text-center text-slate-400 hover:text-white transition">📝 텍스트</button>
-                <button onclick="switchTab('file')" id="tab-file" class="tab-btn flex-1 py-3 text-center text-slate-400 hover:text-white transition">📸 사진/파일</button>
+            <div class="border-t border-slate-700/70 text-sm grid grid-cols-2 gap-2 p-3">
+                <button onclick="switchTab('text')" id="tab-text" class="tab-btn active rounded-xl py-3 text-center text-slate-400 hover:text-white transition border border-transparent">📝 텍스트</button>
+                <button onclick="switchTab('file')" id="tab-file" class="tab-btn rounded-xl py-3 text-center text-slate-400 hover:text-white transition border border-transparent">📸 사진/파일</button>
             </div>
             
-            <div class="p-4">
+            <div class="p-4 pt-1 md:p-5 md:pt-2">
                 <div id="input-text" class="block">
-                    <textarea id="textContent" rows="3" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-sm text-slate-300 focus:outline-none focus:border-emerald-500" placeholder="교과서/자료 내용을 붙여넣으면 슬라이드 교육 자료와 필수 퀴즈를 만듭니다..."></textarea>
-                    <button onclick="processInput('text')" class="w-full mt-3 bg-emerald-600 hover:bg-emerald-500 p-3 rounded-xl font-bold transition-all shadow-lg text-sm text-white">AI 슬라이드 자료 + 필수 퀴즈 만들기</button>
+                    <textarea id="textContent" rows="4" class="w-full professional-input rounded-2xl p-4 text-sm text-slate-200 placeholder:text-slate-500" placeholder="교과서/자료 내용을 붙여넣으면 슬라이드 교육 자료와 필수 퀴즈를 만듭니다..."></textarea>
+                    <button onclick="processInput('text')" class="w-full mt-3 primary-action p-3 rounded-2xl font-black text-sm text-white">AI 슬라이드 자료 + 필수 퀴즈 만들기</button>
                 </div>
 
                 <div id="input-file" class="hidden space-y-4">
                     <label class="block cursor-pointer group">
-                        <div class="bg-slate-900 border border-dashed border-slate-500 group-hover:border-emerald-500 p-6 rounded-xl text-center transition-all">
-                            <span class="block text-2xl mb-2">📸 / 📄</span>
-                            <span class="text-xs text-slate-400 group-hover:text-emerald-400">스크린샷/교재 PDF/학습 자료 업로드<br>(사진, PDF, Word, Excel 등)</span>
+                        <div class="upload-drop p-8 rounded-3xl text-center">
+                            <span class="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-cyan-400/10 border border-cyan-300/20 text-3xl mb-3">📄</span>
+                            <span class="block text-sm font-black text-white">자료를 업로드하면 AI 수업 패키지로 변환합니다</span>
+                            <span class="block text-xs text-slate-400 group-hover:text-cyan-200 mt-2">스크린샷/교재 PDF/학습 자료 업로드<br>(사진, PDF, Word, Excel 등)</span>
                         </div>
                         <input type="file" id="fileInput" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.json" capture="environment" class="hidden">
                     </label>
@@ -159,35 +330,35 @@
             </div>
         </details>
 
-        <details class="bg-slate-800 rounded-xl border border-slate-700">
-            <summary class="p-3 text-xs text-slate-500 cursor-pointer">⚙️ API Settings & Dev Tools</summary>
-            <div class="p-4 space-y-3">
-                <input type="password" id="apiKey" placeholder="Groq API Key" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-2 text-sm focus:border-emerald-500">
-                <button onclick="simulateNextDay()" class="w-full bg-slate-700 p-2 rounded text-xs text-slate-300 hover:bg-slate-600 transition">[테스트용] +1일 타임머신 (하루 결석 처리)</button>
+        <details class="premium-card rounded-3xl overflow-hidden">
+            <summary class="p-4 text-xs text-slate-400 cursor-pointer font-bold">⚙️ API Settings & Dev Tools</summary>
+            <div class="p-4 pt-0 space-y-3">
+                <input type="password" id="apiKey" placeholder="Groq API Key" class="w-full professional-input rounded-xl p-3 text-sm text-slate-200">
+                <button onclick="simulateNextDay()" class="w-full secondary-action p-2 rounded-xl text-xs text-slate-300 transition">[테스트용] +1일 타임머신 (하루 결석 처리)</button>
             </div>
         </details>
 
-        <div id="loadingStatus" class="hidden text-center text-sm font-bold text-yellow-400 animate-pulse bg-slate-800 p-4 rounded-xl border border-yellow-500/50">처리 중입니다... 잠시만 기다려주세요!</div>
+        <div id="loadingStatus" class="hidden text-center text-sm font-bold text-cyan-200 animate-pulse premium-card p-4 rounded-2xl">처리 중입니다... 잠시만 기다려주세요!</div>
         
-        <div id="naggingSection" class="hidden bg-red-900/40 p-6 rounded-2xl border border-red-500/50 shadow-xl">
-            <h3 class="text-xl font-bold text-red-400 mb-2">🤬 40년 베테랑의 팩폭 진단</h3>
+        <div id="naggingSection" class="hidden premium-card p-6 rounded-3xl border-rose-500/30">
+            <h3 class="text-xl font-bold text-rose-300 mb-2">🤬 40년 베테랑의 팩폭 진단</h3>
             <div id="naggingText" class="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap"></div>
         </div>
 
         <div id="quizContainer" class="space-y-6 pb-10"></div>
     </div>
 
-    <div id="closingModal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-        <div class="bg-slate-800 rounded-2xl p-6 max-w-md w-full border border-purple-500/50 shadow-2xl">
-            <h3 class="text-xl font-bold text-purple-400 mb-3">🛑 호랑이 선생님의 마지막 호출</h3>
-            <div class="bg-slate-900 p-4 rounded-xl mb-5 h-48 overflow-y-auto">
+    <div id="closingModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div class="premium-card rounded-3xl p-6 max-w-md w-full border-purple-500/30">
+            <h3 class="text-xl font-bold text-purple-300 mb-3">🛑 호랑이 선생님의 마지막 호출</h3>
+            <div class="professional-input p-4 rounded-2xl mb-5 h-48 overflow-y-auto">
                 <p id="closingReportText" class="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap"></p>
             </div>
             <div class="flex gap-3">
-                <button onclick="cancelReset()" class="flex-1 bg-slate-600 hover:bg-slate-500 p-3 rounded-xl text-sm font-bold text-white transition">
+                <button onclick="cancelReset()" class="flex-1 secondary-action p-3 rounded-xl text-sm font-bold text-white">
                     취소 (기존 교재 유지)
                 </button>
-                <button onclick="confirmResetAndProcess()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 p-3 rounded-xl text-sm font-bold text-white transition shadow-lg">
+                <button onclick="confirmResetAndProcess()" class="flex-1 primary-action p-3 rounded-xl text-sm font-bold text-white">
                     잔소리 명심! 새 교재 시작
                 </button>
             </div>
@@ -739,7 +910,7 @@
             meta.push(`🧑‍🎓 ${deck.audience || "베트남인 한국어 학습자"}`);
             meta.push("🎨 비주얼 학습");
             if (appState.sourceInfo && appState.sourceInfo.name) meta.push(`📎 ${appState.sourceInfo.name}`);
-            document.getElementById('deckMeta').innerHTML = meta.map(item => `<span class="bg-slate-800 border border-slate-700 rounded-full px-2 py-1">${escapeHtml(item)}</span>`).join('');
+            document.getElementById('deckMeta').innerHTML = meta.map(item => `<span class="bg-slate-950/60 border border-slate-700/80 rounded-full px-2 py-1">${escapeHtml(item)}</span>`).join('');
 
             const objectives = ensureArray(deck.objectives);
             document.getElementById('deckObjectives').innerHTML = objectives.length
@@ -754,7 +925,7 @@
             const bullets = ensureArray(slide.bullets).map(item => `<li>${escapeHtml(item)}</li>`).join('');
             const examples = ensureArray(slide.examples).map(item => `<li>${escapeHtml(item)}</li>`).join('');
             return `
-                <article class="slide-card rounded-2xl border border-slate-700 p-4 shadow-lg overflow-hidden">
+                <article class="slide-card rounded-3xl border border-slate-700/80 p-4 shadow-lg overflow-hidden">
                     <div class="flex items-center justify-between gap-3 mb-3">
                         <span class="text-[11px] font-black text-emerald-300">SLIDE ${idx + 1}</span>
                         <span class="text-[10px] text-slate-500">${escapeHtml(getVisualTypeLabel(slide.visualType))}</span>
@@ -838,13 +1009,13 @@
             container.innerHTML = '';
 
             const intro = document.createElement('div');
-            intro.className = "bg-amber-900/30 p-5 rounded-2xl border border-amber-500/40 shadow-lg";
+            intro.className = "premium-card p-5 rounded-3xl border-amber-500/30";
             intro.innerHTML = `<h3 class="text-lg font-black text-amber-200 mb-2">📝 필수 체크퀴즈</h3><p class="text-xs text-slate-300">슬라이드 핵심을 확인합니다. 70% 이상 맞히면 추가 문제 풀이가 열립니다.</p>`;
             container.appendChild(intro);
 
             questions.forEach((q, qIdx) => {
                 const qDiv = document.createElement('div');
-                qDiv.className = "bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-lg";
+                qDiv.className = "premium-card p-5 rounded-3xl";
                 qDiv.dataset.requiredQuestion = "true";
 
                 const question = document.createElement('p');
@@ -1106,7 +1277,7 @@
             const container = document.getElementById('quizContainer');
             questions.forEach((q, qIdx) => {
                 const qDiv = document.createElement('div');
-                qDiv.className = "bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-lg animate-fade-in";
+                qDiv.className = "premium-card p-5 rounded-3xl animate-fade-in";
                 qDiv.dataset.quizQuestion = "normal";
 
                 const question = document.createElement('p');
