@@ -18,6 +18,56 @@
         .slide-card {
             background: linear-gradient(145deg, #0f172a 0%, #111827 100%);
         }
+        .visual-panel {
+            background:
+                radial-gradient(circle at top left, rgba(16, 185, 129, 0.22), transparent 34%),
+                radial-gradient(circle at bottom right, rgba(59, 130, 246, 0.2), transparent 32%),
+                linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(30, 41, 59, 0.92));
+            border: 1px solid rgba(148, 163, 184, 0.28);
+            border-radius: 1rem;
+            padding: 0.9rem;
+            overflow: hidden;
+            position: relative;
+        }
+        .visual-panel::after {
+            content: "";
+            position: absolute;
+            inset: auto -20% -45% auto;
+            width: 12rem;
+            height: 12rem;
+            border-radius: 999px;
+            background: rgba(250, 204, 21, 0.08);
+        }
+        .visual-tiles {
+            display: grid;
+            gap: 0.55rem;
+            grid-template-columns: repeat(auto-fit, minmax(6.7rem, 1fr));
+            position: relative;
+            z-index: 1;
+        }
+        .visual-tile {
+            background: rgba(15, 23, 42, 0.72);
+            border: 1px solid rgba(226, 232, 240, 0.13);
+            border-radius: 0.85rem;
+            min-height: 5.8rem;
+            padding: 0.75rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 0.35rem;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+        .visual-icon { font-size: 1.9rem; line-height: 1; }
+        .visual-label { color: #f8fafc; font-size: 0.78rem; font-weight: 800; line-height: 1.25; }
+        .visual-caption { color: #cbd5e1; font-size: 0.68rem; line-height: 1.35; }
+        .memory-hook {
+            background: linear-gradient(90deg, rgba(217, 119, 6, 0.2), rgba(234, 88, 12, 0.13));
+            border: 1px solid rgba(251, 191, 36, 0.24);
+        }
+        .interaction-box {
+            background: linear-gradient(90deg, rgba(14, 165, 233, 0.18), rgba(20, 184, 166, 0.12));
+            border: 1px solid rgba(125, 211, 252, 0.2);
+        }
     </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen">
@@ -216,6 +266,7 @@
             if (appState.material) {
                 currentStudySection.classList.remove('hidden');
                 document.getElementById('savedMaterialBox').innerText = appState.material;
+                ensureStoredDeckVisuals();
                 renderSlideDeck();
                 uploadDetails.removeAttribute('open');
             } else {
@@ -444,7 +495,11 @@
 - 반드시 JSON 객체만 출력하세요. 마크다운 코드블록, 설명문, 주석 금지.
 - 슬라이드는 6~10장으로 구성하고, 도입-핵심 개념-예문-연습-정리 흐름을 갖추세요.
 - 슬라이드 화면에 보일 문구는 한국어 중심으로 쓰되, 베트남인 학습자가 이해하도록 짧은 베트남어 보조 설명을 함께 넣으세요.
-- 각 슬라이드는 title, coreMessage, bullets, examples, teacherNotes, activity를 모두 포함하세요.
+- 각 슬라이드는 title, coreMessage, bullets, examples, visualType, visualElements, memoryHook, interactionPrompt, teacherNotes, activity를 모두 포함하세요.
+- visualType은 story-scene, comparison, process, mind-map, timeline, vocabulary-cards, role-play 중 하나로 선택하세요.
+- visualElements는 CSS 그래픽 카드로 그릴 요소입니다. 각 항목은 icon, label, caption을 포함하고, label은 한국어 핵심어/문장, caption은 짧은 베트남어 힌트로 쓰세요.
+- memoryHook은 학생의 호기심을 자극하는 암기 장치, 비유, 재미있는 질문으로 작성하세요.
+- interactionPrompt는 30초 안에 할 수 있는 참여형 미션(손들기, 짝 말하기, 빈칸 예상, 상황극 등)으로 작성하세요.
 - requiredQuizzes는 학생이 다음 학습으로 넘어가기 전에 반드시 풀어야 하는 체크퀴즈입니다. 슬라이드 핵심을 골고루 확인하도록 4~8문항을 만드세요.
 - 퀴즈 질문(q_vn)과 해설(exp)은 베트남어, 보기(options_korean_only)는 100% 한국어만 사용하세요.
 
@@ -463,6 +518,13 @@
         "coreMessage": "한 문장 핵심 메시지",
         "bullets": ["핵심 bullet", "핵심 bullet", "핵심 bullet"],
         "examples": ["한국어 예문 - nghĩa tiếng Việt", "한국어 예문 - nghĩa tiếng Việt"],
+        "visualType": "vocabulary-cards",
+        "visualElements": [
+          { "icon": "🏠", "label": "집", "caption": "nhà" },
+          { "icon": "🚇", "label": "지하철", "caption": "tàu điện ngầm" }
+        ],
+        "memoryHook": "재미있는 암기 장치 또는 궁금증 유발 질문",
+        "interactionPrompt": "30초 참여 미션",
         "teacherNotes": "교사용 설명/진행 팁을 베트남어로 작성",
         "activity": "학생이 바로 해볼 짧은 활동"
       }
@@ -548,6 +610,10 @@
                 coreMessage: toText((slide || {}).coreMessage, ""),
                 bullets: ensureArray((slide || {}).bullets).slice(0, 5).map(item => toText(item, "")).filter(Boolean),
                 examples: ensureArray((slide || {}).examples).slice(0, 4).map(item => toText(item, "")).filter(Boolean),
+                visualType: normalizeVisualType((slide || {}).visualType),
+                visualElements: normalizeVisualElements((slide || {}).visualElements, slide || {}, idx),
+                memoryHook: toText((slide || {}).memoryHook, ""),
+                interactionPrompt: toText((slide || {}).interactionPrompt, ""),
                 teacherNotes: toText((slide || {}).teacherNotes, ""),
                 activity: toText((slide || {}).activity, "")
             })).filter(slide => slide.title || slide.bullets.length || slide.examples.length);
@@ -596,8 +662,64 @@
             return Number.isInteger(index) && index >= 0 && index < 4 ? index : 0;
         }
 
+        function normalizeVisualType(value) {
+            const allowedTypes = ["story-scene", "comparison", "process", "mind-map", "timeline", "vocabulary-cards", "role-play"];
+            return allowedTypes.includes(value) ? value : "vocabulary-cards";
+        }
+
+        function normalizeVisualElements(value, slide = {}, slideIndex = 0) {
+            const elements = ensureArray(value).slice(0, 5).map((item, idx) => {
+                const element = item || {};
+                return {
+                    icon: toText(element.icon, getFallbackVisualIcon(idx)),
+                    label: toText(element.label, ""),
+                    caption: toText(element.caption, "")
+                };
+            }).filter(element => element.label || element.caption);
+
+            return elements.length ? elements : buildFallbackVisualElements(slide, slideIndex);
+        }
+
+        function buildFallbackVisualElements(slide, slideIndex) {
+            const candidates = [
+                toText(slide.title, ""),
+                toText(slide.coreMessage, ""),
+                ...ensureArray(slide.bullets).slice(0, 3)
+            ].filter(Boolean);
+
+            return candidates.slice(0, 4).map((text, idx) => ({
+                icon: getFallbackVisualIcon(slideIndex + idx),
+                label: text.length > 28 ? `${text.substring(0, 28)}...` : text,
+                caption: "핵심 이미지로 기억하기"
+            }));
+        }
+
+        function getFallbackVisualIcon(index) {
+            return ["💡", "🗣️", "📌", "🎯", "✨"][index % 5];
+        }
+
         function hasSlideDeck() {
             return Boolean(appState.slideDeck && Array.isArray(appState.slideDeck.slides) && appState.slideDeck.slides.length);
+        }
+
+        function ensureStoredDeckVisuals() {
+            if (!hasSlideDeck()) return;
+
+            let changed = false;
+            appState.slideDeck.slides = appState.slideDeck.slides.map((slide, idx) => {
+                const nextSlide = slide || {};
+                if (!nextSlide.visualType) {
+                    nextSlide.visualType = "vocabulary-cards";
+                    changed = true;
+                }
+                if (!Array.isArray(nextSlide.visualElements) || nextSlide.visualElements.length === 0) {
+                    nextSlide.visualElements = buildFallbackVisualElements(nextSlide, idx);
+                    changed = true;
+                }
+                return nextSlide;
+            });
+
+            if (changed) saveState();
         }
 
         function renderSlideDeck() {
@@ -615,6 +737,7 @@
             const meta = [];
             meta.push(`⏱️ ${deck.estimatedMinutes || 20}분`);
             meta.push(`🧑‍🎓 ${deck.audience || "베트남인 한국어 학습자"}`);
+            meta.push("🎨 비주얼 학습");
             if (appState.sourceInfo && appState.sourceInfo.name) meta.push(`📎 ${appState.sourceInfo.name}`);
             document.getElementById('deckMeta').innerHTML = meta.map(item => `<span class="bg-slate-800 border border-slate-700 rounded-full px-2 py-1">${escapeHtml(item)}</span>`).join('');
 
@@ -631,19 +754,58 @@
             const bullets = ensureArray(slide.bullets).map(item => `<li>${escapeHtml(item)}</li>`).join('');
             const examples = ensureArray(slide.examples).map(item => `<li>${escapeHtml(item)}</li>`).join('');
             return `
-                <article class="slide-card rounded-2xl border border-slate-700 p-4 shadow-lg">
+                <article class="slide-card rounded-2xl border border-slate-700 p-4 shadow-lg overflow-hidden">
                     <div class="flex items-center justify-between gap-3 mb-3">
                         <span class="text-[11px] font-black text-emerald-300">SLIDE ${idx + 1}</span>
-                        <span class="text-[10px] text-slate-500">수업 화면용</span>
+                        <span class="text-[10px] text-slate-500">${escapeHtml(getVisualTypeLabel(slide.visualType))}</span>
                     </div>
                     <h4 class="text-base font-black text-white mb-2">${escapeHtml(slide.title)}</h4>
                     <p class="text-sm text-emerald-100 bg-emerald-900/20 border border-emerald-500/20 rounded-xl p-3 mb-3">${escapeHtml(slide.coreMessage || "")}</p>
+                    ${renderVisualPanel(slide)}
                     <ul class="text-xs text-slate-200 space-y-1 list-disc pl-4 mb-3">${bullets}</ul>
                     ${examples ? `<div class="bg-slate-950/70 rounded-xl p-3 mb-3"><p class="text-[11px] font-bold text-blue-300 mb-1">예문</p><ul class="text-xs text-slate-300 space-y-1 list-disc pl-4">${examples}</ul></div>` : ''}
+                    ${slide.memoryHook ? `<p class="memory-hook text-xs text-amber-100 rounded-xl p-3 mb-3">💡 기억 훅: ${escapeHtml(slide.memoryHook)}</p>` : ''}
+                    ${slide.interactionPrompt ? `<p class="interaction-box text-xs text-sky-100 rounded-xl p-3 mb-3">🎮 참여 미션: ${escapeHtml(slide.interactionPrompt)}</p>` : ''}
                     ${slide.activity ? `<p class="text-xs text-amber-200 bg-amber-900/20 border border-amber-500/20 rounded-xl p-3 mb-3">활동: ${escapeHtml(slide.activity)}</p>` : ''}
                     ${slide.teacherNotes ? `<details class="text-xs text-slate-400"><summary class="cursor-pointer text-slate-300 font-bold">교사용 노트</summary><p class="mt-2 leading-relaxed whitespace-pre-wrap">${escapeHtml(slide.teacherNotes)}</p></details>` : ''}
                 </article>
             `;
+        }
+
+        function renderVisualPanel(slide) {
+            const elements = ensureArray(slide.visualElements);
+            if (!elements.length) return "";
+
+            const tiles = elements.map(element => `
+                <div class="visual-tile">
+                    <div class="visual-icon">${escapeHtml(element.icon || "💡")}</div>
+                    <div class="visual-label">${escapeHtml(element.label || "")}</div>
+                    ${element.caption ? `<div class="visual-caption">${escapeHtml(element.caption)}</div>` : ''}
+                </div>
+            `).join('');
+
+            return `
+                <div class="visual-panel mb-3">
+                    <div class="flex items-center justify-between gap-3 mb-3 relative z-10">
+                        <span class="text-[11px] font-black text-cyan-200">비주얼라이제이션</span>
+                        <span class="text-[10px] text-slate-400">${escapeHtml(getVisualTypeLabel(slide.visualType))}</span>
+                    </div>
+                    <div class="visual-tiles">${tiles}</div>
+                </div>
+            `;
+        }
+
+        function getVisualTypeLabel(type) {
+            const labels = {
+                "story-scene": "상황 그림",
+                "comparison": "비교 그래픽",
+                "process": "단계 흐름",
+                "mind-map": "마인드맵",
+                "timeline": "타임라인",
+                "vocabulary-cards": "어휘 카드",
+                "role-play": "역할극"
+            };
+            return labels[type] || "비주얼 카드";
         }
 
         function renderRequiredQuizStatus() {
@@ -770,13 +932,22 @@
             const slidePages = ensureArray(deck.slides).map((slide, idx) => {
                 const bullets = ensureArray(slide.bullets).map(item => `<li>${escapeHtml(item)}</li>`).join('');
                 const examples = ensureArray(slide.examples).map(item => `<li>${escapeHtml(item)}</li>`).join('');
+                const visuals = ensureArray(slide.visualElements).map(element => `
+                    <div class="visual-item">
+                        <strong>${escapeHtml(element.icon || "💡")} ${escapeHtml(element.label || "")}</strong>
+                        ${element.caption ? `<span>${escapeHtml(element.caption)}</span>` : ''}
+                    </div>
+                `).join('');
                 return `
                     <section class="page">
                         <p class="label">SLIDE ${idx + 1}</p>
                         <h2>${escapeHtml(slide.title)}</h2>
                         <p class="core">${escapeHtml(slide.coreMessage || "")}</p>
+                        ${visuals ? `<div class="visual-print"><p class="label">${escapeHtml(getVisualTypeLabel(slide.visualType))}</p><div class="visual-grid">${visuals}</div></div>` : ''}
                         <ul>${bullets}</ul>
                         ${examples ? `<h3>예문</h3><ul>${examples}</ul>` : ''}
+                        ${slide.memoryHook ? `<p class="hook">기억 훅: ${escapeHtml(slide.memoryHook)}</p>` : ''}
+                        ${slide.interactionPrompt ? `<p class="mission">참여 미션: ${escapeHtml(slide.interactionPrompt)}</p>` : ''}
                         ${slide.activity ? `<p class="activity">활동: ${escapeHtml(slide.activity)}</p>` : ''}
                         ${slide.teacherNotes ? `<p class="notes">교사용 노트: ${escapeHtml(slide.teacherNotes)}</p>` : ''}
                     </section>
@@ -810,6 +981,13 @@
         h3 { margin-top: 28px; }
         li { font-size: 20px; margin: 10px 0; line-height: 1.45; }
         .core { font-size: 22px; background: #ecfdf5; border-left: 6px solid #059669; padding: 18px; }
+        .visual-print { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 18px; padding: 18px; margin: 18px 0; }
+        .visual-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+        .visual-item { background: white; border: 1px solid #e5e7eb; border-radius: 14px; padding: 14px; }
+        .visual-item strong { display: block; font-size: 20px; }
+        .visual-item span { display: block; color: #4b5563; margin-top: 6px; }
+        .hook { background: #fffbeb; border-left: 6px solid #d97706; padding: 14px; font-size: 18px; }
+        .mission { background: #eff6ff; border-left: 6px solid #0284c7; padding: 14px; font-size: 18px; }
         .activity { background: #fffbeb; border-left: 6px solid #f59e0b; padding: 14px; font-size: 18px; }
         .notes, .answer { color: #374151; font-size: 16px; margin-top: 24px; }
     </style>
@@ -905,7 +1083,10 @@
                     `슬라이드 ${idx + 1}: ${slide.title}`,
                     `핵심: ${slide.coreMessage}`,
                     `내용: ${ensureArray(slide.bullets).join(' / ')}`,
-                    `예문: ${ensureArray(slide.examples).join(' / ')}`
+                    `예문: ${ensureArray(slide.examples).join(' / ')}`,
+                    `비주얼: ${ensureArray(slide.visualElements).map(item => `${item.label}(${item.caption})`).join(' / ')}`,
+                    `기억 훅: ${slide.memoryHook || ''}`,
+                    `참여 미션: ${slide.interactionPrompt || ''}`
                 ].join('\n');
             }).join('\n\n');
 
