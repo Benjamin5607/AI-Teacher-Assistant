@@ -333,11 +333,11 @@
                     <div class="upload-drop p-6 rounded-3xl">
                         <span class="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-rose-400/10 border border-rose-300/20 text-3xl mb-3">▶️</span>
                         <p class="text-sm font-black text-white text-center">YouTube 링크를 슬라이드 수업 자료로 변환</p>
-                        <p class="text-xs text-slate-400 text-center mt-2">자막이 있으면 자막을, 없으면 Groq Whisper로 음성을 인식해 슬라이드 수업 자료를 만듭니다.</p>
+                        <p class="text-xs text-slate-400 text-center mt-2">링크만 넣으면 자막·설명·챕터를 자동 추출해 슬라이드 수업 자료를 만듭니다.</p>
                     </div>
                     <input type="url" id="youtubeUrl" placeholder="https://www.youtube.com/watch?v=..." class="w-full professional-input rounded-2xl p-4 text-sm text-slate-200 placeholder:text-slate-500">
                     <button onclick="processInput('youtube')" class="w-full primary-action p-3 rounded-2xl font-black text-sm text-white">YouTube 영상 → 슬라이드 자료 만들기</button>
-                    <p class="text-[11px] text-slate-500 leading-relaxed">링크만 넣으면 됩니다. 자막이 없어도 Groq API Key로 자동 음성 인식합니다.</p>
+                    <p class="text-[11px] text-slate-500 leading-relaxed">별도 서버 설정 없이 바로 동작합니다. Groq API Key만 입력하세요.</p>
                 </div>
             </div>
         </details>
@@ -672,16 +672,70 @@
             };
         }
 
-        async function fetchYouTubeTranscriptAuto(videoId) {
-            const groqKey = apiKeyInput.value.trim();
-            if (!groqKey) {
-                throw new Error('Settings에 Groq API Key를 입력해주세요.');
+        function cleanJinaYouTubeText(raw, metadata = {}) {
+            let text = String(raw || '');
+            text = text.replace(/!\[[^\]]*\]\([^)]+\)/g, '');
+            text = text.replace(/\[(.*?)\]\((https?:\/\/[^)]+)\)/g, '$1');
+            text = text.replace(/https?:\/\/www\.youtube\.com\/[^\s)]+/g, '');
+
+            const sections = [];
+            const descriptionMatch = text.match(/## Description\s*([\s\S]*?)(?=\n## |\n# |$)/i);
+            const transcriptMatch = text.match(/## Transcript\s*([\s\S]*?)(?=\n## |\n# |$)/i);
+            const markdownMatch = text.match(/Markdown Content:\s*([\s\S]*)/i);
+
+            if (descriptionMatch) sections.push(descriptionMatch[1].trim());
+            if (transcriptMatch) sections.push(transcriptMatch[1].trim());
+
+            let cleaned = sections.join('\n\n').trim();
+            if (!cleaned && markdownMatch) {
+                cleaned = markdownMatch[1]
+                    .replace(/^#.*$/gm, '')
+                    .replace(/^(Skip navigation|Search|Sign in|Tap to unmute).*$/gim, '')
+                    .replace(/Show transcript|Follow along using the transcript\./gi, '')
+                    .replace(/\n{3,}/g, '\n\n')
+                    .trim();
             }
 
+            if (metadata.title && !cleaned.includes(metadata.title)) {
+                cleaned = `${metadata.title}\n\n${cleaned}`.trim();
+            }
+
+            return cleaned.replace(/\n{3,}/g, '\n\n').trim();
+        }
+
+        async function fetchYouTubeViaJina(videoId, metadata) {
+            const watchUrl = metadata.url || `https://www.youtube.com/watch?v=${videoId}`;
+            const res = await fetch(`https://r.jina.ai/${encodeURIComponent(watchUrl)}`, {
+                headers: { Accept: 'text/plain' }
+            });
+
+            if (!res.ok) {
+                throw new Error('YouTube 페이지 내용을 읽지 못했습니다.');
+            }
+
+            const raw = await res.text();
+            const transcript = cleanJinaYouTubeText(raw, metadata);
+            if (transcript.length < 120) {
+                throw new Error('영상에서 충분한 설명/자막 텍스트를 찾지 못했습니다.');
+            }
+
+            return {
+                videoId,
+                title: metadata.title,
+                channel: metadata.author,
+                language: 'auto',
+                extractionMethod: 'web-extract',
+                transcript
+            };
+        }
+
+        async function fetchYouTubeTranscriptAuto(videoId, metadata) {
+            const groqKey = apiKeyInput.value.trim();
             const endpoints = getTranscriptApiEndpoints();
             let lastError = null;
 
             for (const baseUrl of endpoints) {
+                if (!groqKey) break;
                 try {
                     const endpoint = `${baseUrl}?videoId=${encodeURIComponent(videoId)}`;
                     const res = await fetch(endpoint, {
@@ -698,11 +752,18 @@
                 }
             }
 
-            if (window.location.protocol === 'file:') {
-                throw new Error('YouTube 분석은 웹 주소로 접속했을 때 자동으로 동작합니다. 배포된 앱 주소로 열어주세요.');
+            try {
+                showLoading('🌐 YouTube 페이지에서 자막·설명을 자동 추출하는 중입니다...');
+                return await fetchYouTubeViaJina(videoId, metadata);
+            } catch (error) {
+                lastError = error;
             }
 
-            throw lastError || new Error('YouTube 분석 서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.');
+            if (window.location.protocol === 'file:') {
+                throw new Error('YouTube 분석은 웹 주소로 접속했을 때 자동으로 동작합니다.');
+            }
+
+            throw lastError || new Error('YouTube 영상 내용을 가져오지 못했습니다. 잠시 후 다시 시도해주세요.');
         }
 
         async function fetchYouTubeLessonText(url) {
@@ -713,15 +774,24 @@
             showLoading('▶️ YouTube 영상 정보를 확인하는 중입니다...');
             const metadata = await fetchYouTubeMetadata(videoId);
 
+            if (!apiKeyInput.value.trim()) {
+                throw new Error('Settings에 Groq API Key를 입력해주세요.');
+            }
+
             showLoading('📝 YouTube 자막/음성을 추출하는 중입니다...');
-            const transcriptData = await fetchYouTubeTranscriptAuto(videoId);
+            const transcriptData = await fetchYouTubeTranscriptAuto(videoId, metadata);
 
             const transcript = transcriptData.transcript.trim();
             const title = transcriptData.title || metadata.title;
             const channel = transcriptData.channel || metadata.author;
             const language = transcriptData.language || 'unknown';
             const extractionMethod = transcriptData.extractionMethod || 'captions';
-            const extractionLabel = extractionMethod === 'speech' ? '음성 인식(Groq Whisper)' : '자막 추출';
+            const extractionLabels = {
+                speech: '음성 인식(Groq Whisper)',
+                captions: '자막 추출',
+                'web-extract': '페이지 자동 추출'
+            };
+            const extractionLabel = extractionLabels[extractionMethod] || '자동 추출';
 
             const lessonText = [
                 `[YouTube 영상]`,
@@ -1105,6 +1175,7 @@
             meta.push("🎨 비주얼 학습");
             if (appState.sourceInfo?.type === 'youtube') meta.push('▶️ YouTube');
             if (appState.sourceInfo?.extractionMethod === 'speech') meta.push('🎙️ 음성 인식');
+            if (appState.sourceInfo?.extractionMethod === 'web-extract') meta.push('🌐 자동 추출');
             if (appState.sourceInfo && appState.sourceInfo.name) meta.push(`📎 ${appState.sourceInfo.name}`);
             if (appState.sourceInfo?.language) meta.push(`🌐 ${appState.sourceInfo.language}`);
             document.getElementById('deckMeta').innerHTML = meta.map(item => `<span class="bg-slate-950/60 border border-slate-700/80 rounded-full px-2 py-1">${escapeHtml(item)}</span>`).join('');
