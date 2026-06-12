@@ -586,10 +586,6 @@
             return result.data.text;
         }
 
-        const PUBLIC_TRANSCRIPT_APIS = [
-            'https://ai-teacher-assistant.pages.dev/api/youtube-transcript'
-        ];
-
         function getAppBasePath() {
             let path = window.location.pathname || '';
             if (path.endsWith('/index.html')) {
@@ -601,18 +597,23 @@
             return path === '/' ? '' : path;
         }
 
+        function isGitHubPagesHost() {
+            return window.location.hostname.endsWith('.github.io');
+        }
+
         function getTranscriptApiEndpoints() {
             const endpoints = [];
             const basePath = getAppBasePath();
 
             if (window.location.protocol === 'file:') {
                 endpoints.push('http://localhost:3000/api/youtube-transcript');
-            } else {
+            } else if (!isGitHubPagesHost()) {
                 endpoints.push(`${window.location.origin}${basePath}/api/youtube-transcript`);
             }
 
-            if (window.location.hostname.endsWith('.github.io')) {
-                endpoints.push(...PUBLIC_TRANSCRIPT_APIS);
+            const optionalApi = localStorage.getItem('transcript_api_url');
+            if (optionalApi) {
+                endpoints.push(optionalApi.replace(/\/$/, ''));
             }
 
             return [...new Set(endpoints.filter(Boolean))];
@@ -620,6 +621,44 @@
 
         function saveIntegrationSettings() {
             localStorage.setItem('groq_key', apiKeyInput.value.trim());
+        }
+
+        async function fetchGroqChatCompletion(payload, apiKey, { maxRetries = 3 } = {}) {
+            let lastError = null;
+
+            for (let attempt = 0; attempt <= maxRetries; attempt++) {
+                const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${apiKey}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (res.ok) {
+                    return res.json();
+                }
+
+                const data = await res.json().catch(() => ({}));
+                const message = data?.error?.message || `Groq API 오류 (${res.status})`;
+
+                if (res.status === 429 && attempt < maxRetries) {
+                    const waitMs = Math.min(2000 * (2 ** attempt), 15000);
+                    showLoading(`⏳ Groq API 한도 대기 중... ${attempt + 1}/${maxRetries}`);
+                    await new Promise(resolve => setTimeout(resolve, waitMs));
+                    continue;
+                }
+
+                if (res.status === 429) {
+                    throw new Error('Groq API 요청 한도에 도달했습니다. 1~2분 후 다시 시도해주세요.');
+                }
+
+                lastError = new Error(message);
+                break;
+            }
+
+            throw lastError || new Error('Groq API 요청에 실패했습니다.');
         }
 
         function parseYouTubeVideoId(input) {
@@ -729,9 +768,7 @@
             };
         }
 
-        async function fetchYouTubeTranscriptAuto(videoId, metadata) {
-            const groqKey = apiKeyInput.value.trim();
-            const endpoints = getTranscriptApiEndpoints();
+        async function fetchYouTubeTranscriptViaApi(endpoints, videoId, groqKey) {
             let lastError = null;
 
             for (const baseUrl of endpoints) {
@@ -750,6 +787,27 @@
                 } catch (error) {
                     lastError = error;
                 }
+            }
+
+            if (lastError) throw lastError;
+            return null;
+        }
+
+        async function fetchYouTubeTranscriptAuto(videoId, metadata) {
+            if (isGitHubPagesHost()) {
+                showLoading('🌐 YouTube 페이지에서 자막·설명을 자동 추출하는 중입니다...');
+                return fetchYouTubeViaJina(videoId, metadata);
+            }
+
+            const groqKey = apiKeyInput.value.trim();
+            const endpoints = getTranscriptApiEndpoints();
+            let lastError = null;
+
+            try {
+                const apiResult = await fetchYouTubeTranscriptViaApi(endpoints, videoId, groqKey);
+                if (apiResult) return apiResult;
+            } catch (error) {
+                lastError = error;
             }
 
             try {
@@ -878,25 +936,22 @@
 혼내면서도 결국엔 잘 해보자는 격려로 마무리하세요.`;
 
             try {
-                const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-                    method: "POST",
-                    headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        model: "llama-3.3-70b-versatile",
-                        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: `결석 누적: ${appState.missedDays}일\n이전 학습 성적:\n${historyText}` }],
-                        temperature: 0.7 
-                    })
-                });
-
-                const data = await res.json();
+                const data = await fetchGroqChatCompletion({
+                    model: "llama-3.3-70b-versatile",
+                    messages: [{ role: "system", content: systemPrompt }, { role: "user", content: `결석 누적: ${appState.missedDays}일\n이전 학습 성적:\n${historyText}` }],
+                    temperature: 0.7
+                }, key, { maxRetries: 1 });
                 hideLoading();
-                
-                // 모달 띄우기
+
                 document.getElementById('closingReportText').innerText = data.choices[0].message.content;
                 document.getElementById('closingModal').classList.remove('hidden');
 
             } catch (err) {
                 hideLoading();
+                if (String(err.message || '').includes('한도')) {
+                    confirmResetAndProcess();
+                    return;
+                }
                 alert("평가 리포트 생성 중 오류가 발생했습니다. 그냥 바로 리셋을 진행할까요?");
                 confirmResetAndProcess();
             }
@@ -977,21 +1032,14 @@
 }`;
 
             try {
-                const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-                    method: "POST",
-                    headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        model: "llama-3.3-70b-versatile",
-                        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: materialForAI }],
-                        response_format: { type: "json_object" },
-                        temperature: 0.35,
-                        max_tokens: 8000
-                    })
-                });
+                const data = await fetchGroqChatCompletion({
+                    model: "llama-3.3-70b-versatile",
+                    messages: [{ role: "system", content: systemPrompt }, { role: "user", content: materialForAI }],
+                    response_format: { type: "json_object" },
+                    temperature: 0.35,
+                    max_tokens: 8000
+                }, key);
 
-                if (!res.ok) throw new Error("AI 요청 실패");
-                
-                const data = await res.json();
                 const json = parseJsonResponse(data.choices[0].message.content);
                 const generated = normalizeGeneratedLesson(json);
                 
@@ -1016,7 +1064,7 @@
 
             } catch (err) {
                 hideLoading();
-                alert("새 교재 분석 중 오류가 발생했습니다. API 키, 자료 길이, 추출 텍스트 품질을 확인해주세요.");
+                alert(err.message || "새 교재 분석 중 오류가 발생했습니다. API 키, 자료 길이, 추출 텍스트 품질을 확인해주세요.");
             }
         }
 
@@ -1488,25 +1536,20 @@
 { "questions": [ { "q_vn": "...", "options_korean_only": ["한국어","한국어","한국어","한국어"], "a": 0, "exp": "..." } ] }`;
 
             try {
-                const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-                    method: "POST",
-                    headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        model: "llama-3.3-70b-versatile",
-                        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: buildQuizSourceMaterial() }],
-                        response_format: { type: "json_object" },
-                        temperature: 0.4, // 바보 방지를 위해 0.2에서 0.4로 정상화. (지능 복구!)
-                        max_tokens: 8000
-                    })
-                });
+                const data = await fetchGroqChatCompletion({
+                    model: "llama-3.3-70b-versatile",
+                    messages: [{ role: "system", content: systemPrompt }, { role: "user", content: buildQuizSourceMaterial() }],
+                    response_format: { type: "json_object" },
+                    temperature: 0.4,
+                    max_tokens: 8000
+                }, key);
 
-                const data = await res.json();
                 const json = parseJsonResponse(data.choices[0].message.content);
                 const questions = normalizeQuizQuestions(json.questions);
                 if (!questions.length) throw new Error("퀴즈 생성 실패");
                 renderQuiz(questions);
             } catch (err) {
-                alert("출제 오류 발생!");
+                alert(err.message || "출제 오류 발생!");
             } finally {
                 genBtn.innerText = `🚀 총 ${currentTotalQuizzes}문제 출제 및 풀기`;
                 genBtn.disabled = false;
@@ -1616,17 +1659,12 @@
 학생의 일주일치 성적표를 바탕으로 '베트남어'로 1000자 이상의 팩폭 진단 및 조언을 작성하세요.`;
 
             try {
-                const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-                    method: "POST",
-                    headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        model: "llama-3.3-70b-versatile",
-                        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: `결석 누적: ${appState.missedDays}일\n성적 히스토리:\n${historyText}` }],
-                        temperature: 0.7 
-                    })
-                });
+                const data = await fetchGroqChatCompletion({
+                    model: "llama-3.3-70b-versatile",
+                    messages: [{ role: "system", content: systemPrompt }, { role: "user", content: `결석 누적: ${appState.missedDays}일\n성적 히스토리:\n${historyText}` }],
+                    temperature: 0.7
+                }, key);
 
-                const data = await res.json();
                 document.getElementById('naggingSection').classList.remove('hidden');
                 document.getElementById('naggingText').innerText = data.choices[0].message.content;
                 
@@ -1636,7 +1674,7 @@
                     saveState();
                     initApp();
                 }
-            } catch (err) { alert("오류 발생!"); } 
+            } catch (err) { alert(err.message || "오류 발생!"); }
             finally { btn.innerText = "📊 일주일 평가 & 잔소리 듣기 (1000자)"; btn.disabled = false; }
         }
 
