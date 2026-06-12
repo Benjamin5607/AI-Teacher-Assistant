@@ -203,7 +203,7 @@
                         </div>
                     </div>
                     <p class="text-slate-300 text-sm md:text-base leading-relaxed max-w-2xl">
-                        교재, PDF, 스크린샷, YouTube 영상을 AI가 분석해 비주얼 슬라이드·학습 활동·필수 퀴즈까지 한 번에 구성하는 전문 교육 콘텐츠 제작 도구입니다.
+                        교재, PDF, 스크린샷, YouTube 영상을 AI가 심층 분석해 핵심 개념부터 실습까지 빠짐없이 담은 비주얼 슬라이드·학습 활동·필수 퀴즈 패키지를 만드는 전문 교육 콘텐츠 제작 도구입니다.
                     </p>
                 </div>
                 <div class="grid grid-cols-3 gap-2 text-center">
@@ -332,12 +332,12 @@
                 <div id="input-youtube" class="hidden space-y-4">
                     <div class="upload-drop p-6 rounded-3xl">
                         <span class="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-rose-400/10 border border-rose-300/20 text-3xl mb-3">▶️</span>
-                        <p class="text-sm font-black text-white text-center">YouTube 링크를 슬라이드 수업 자료로 변환</p>
-                        <p class="text-xs text-slate-400 text-center mt-2">링크만 넣으면 자막·설명·챕터를 자동 추출해 슬라이드 수업 자료를 만듭니다.</p>
+                        <p class="text-sm font-black text-white text-center">YouTube 영상 → 완전 학습 패키지</p>
+                        <p class="text-xs text-slate-400 text-center mt-2">영상 전체를 AI가 심층 분석해 핵심 개념·절차·용어·실습까지 빠짐없이 담은 슬라이드와 필수 퀴즈를 만듭니다. 단순 자막 복사가 아닙니다.</p>
                     </div>
                     <input type="url" id="youtubeUrl" placeholder="https://www.youtube.com/watch?v=..." class="w-full professional-input rounded-2xl p-4 text-sm text-slate-200 placeholder:text-slate-500">
-                    <button onclick="processInput('youtube')" class="w-full primary-action p-3 rounded-2xl font-black text-sm text-white">YouTube 영상 → 슬라이드 자료 만들기</button>
-                    <p class="text-[11px] text-slate-500 leading-relaxed">별도 서버 설정 없이 바로 동작합니다. Groq API Key만 입력하세요.</p>
+                    <button onclick="processInput('youtube')" class="w-full primary-action p-3 rounded-2xl font-black text-sm text-white">YouTube 영상 심층 분석 → 학습 자료 생성</button>
+                    <p class="text-[11px] text-slate-500 leading-relaxed">설명·챕터·자막/음성을 수집한 뒤, AI가 2단계로 내용을 이해하고 수업 자료로 재구성합니다. Groq API Key만 필요합니다.</p>
                 </div>
             </div>
         </details>
@@ -449,7 +449,10 @@
 
             if (appState.material) {
                 currentStudySection.classList.remove('hidden');
-                document.getElementById('savedMaterialBox').innerText = appState.material;
+                const materialBox = document.getElementById('savedMaterialBox');
+                materialBox.innerText = appState.material;
+                materialBox.classList.toggle('h-24', appState.sourceInfo?.type !== 'youtube');
+                materialBox.classList.toggle('h-48', appState.sourceInfo?.type === 'youtube');
                 ensureStoredDeckVisuals();
                 renderSlideDeck();
                 uploadDetails.removeAttribute('open');
@@ -711,35 +714,64 @@
             };
         }
 
-        function cleanJinaYouTubeText(raw, metadata = {}) {
+        function extractYouTubeChapters(text) {
+            const chapters = [];
+            const seen = new Set();
+            for (const line of String(text || '').split('\n')) {
+                const match = line.trim().match(/^(\d{1,2}:\d{2}(?::\d{2})?)\s+(.+)$/);
+                if (!match) continue;
+                const key = `${match[1]}|${match[2]}`;
+                if (seen.has(key)) continue;
+                seen.add(key);
+                chapters.push({ time: match[1], title: match[2].trim() });
+            }
+            return chapters;
+        }
+
+        function parseJinaYouTubeContent(raw, metadata = {}) {
             let text = String(raw || '');
             text = text.replace(/!\[[^\]]*\]\([^)]+\)/g, '');
             text = text.replace(/\[(.*?)\]\((https?:\/\/[^)]+)\)/g, '$1');
             text = text.replace(/https?:\/\/www\.youtube\.com\/[^\s)]+/g, '');
 
-            const sections = [];
             const descriptionMatch = text.match(/## Description\s*([\s\S]*?)(?=\n## |\n# |$)/i);
             const transcriptMatch = text.match(/## Transcript\s*([\s\S]*?)(?=\n## |\n# |$)/i);
             const markdownMatch = text.match(/Markdown Content:\s*([\s\S]*)/i);
 
-            if (descriptionMatch) sections.push(descriptionMatch[1].trim());
-            if (transcriptMatch) sections.push(transcriptMatch[1].trim());
+            const description = descriptionMatch ? descriptionMatch[1].trim() : '';
+            const transcript = transcriptMatch ? transcriptMatch[1].trim() : '';
 
-            let cleaned = sections.join('\n\n').trim();
-            if (!cleaned && markdownMatch) {
-                cleaned = markdownMatch[1]
+            let fallbackBody = '';
+            if (markdownMatch) {
+                fallbackBody = markdownMatch[1]
                     .replace(/^#.*$/gm, '')
-                    .replace(/^(Skip navigation|Search|Sign in|Tap to unmute).*$/gim, '')
-                    .replace(/Show transcript|Follow along using the transcript\./gi, '')
+                    .replace(/^(Skip navigation|Search|Sign in|Tap to unmute|Watch later|Share|Copy link|Save|Report).*$/gim, '')
+                    .replace(/Show transcript|Follow along using the transcript\.|Watch on YouTube|Shop the store/gi, '')
                     .replace(/\n{3,}/g, '\n\n')
                     .trim();
             }
 
-            if (metadata.title && !cleaned.includes(metadata.title)) {
-                cleaned = `${metadata.title}\n\n${cleaned}`.trim();
+            const chapters = extractYouTubeChapters(`${description}\n${fallbackBody}`);
+            const spokenText = transcript || fallbackBody;
+            const parts = [];
+
+            if (description) parts.push(`[영상 설명]\n${description}`);
+            if (chapters.length) {
+                parts.push(`[챕터 구조]\n${chapters.map(chapter => `${chapter.time} ${chapter.title}`).join('\n')}`);
+            }
+            if (spokenText) parts.push(`[자막/발화 내용]\n${spokenText}`);
+
+            let fullText = parts.join('\n\n').trim();
+            if (metadata.title && !fullText.includes(metadata.title)) {
+                fullText = `[영상 제목] ${metadata.title}\n\n${fullText}`.trim();
             }
 
-            return cleaned.replace(/\n{3,}/g, '\n\n').trim();
+            return {
+                description,
+                transcript: spokenText,
+                chapters,
+                fullText: fullText.replace(/\n{3,}/g, '\n\n').trim()
+            };
         }
 
         async function fetchYouTubeViaJina(videoId, metadata) {
@@ -753,8 +785,8 @@
             }
 
             const raw = await res.text();
-            const transcript = cleanJinaYouTubeText(raw, metadata);
-            if (transcript.length < 120) {
+            const parsed = parseJinaYouTubeContent(raw, metadata);
+            if (parsed.fullText.length < 120) {
                 throw new Error('영상에서 충분한 설명/자막 텍스트를 찾지 못했습니다.');
             }
 
@@ -764,7 +796,10 @@
                 channel: metadata.author,
                 language: 'auto',
                 extractionMethod: 'web-extract',
-                transcript
+                transcript: parsed.fullText,
+                description: parsed.description,
+                chapters: parsed.chapters,
+                spokenText: parsed.transcript
             };
         }
 
@@ -836,10 +871,9 @@
                 throw new Error('Settings에 Groq API Key를 입력해주세요.');
             }
 
-            showLoading('📝 YouTube 자막/음성을 추출하는 중입니다...');
+            showLoading('📥 YouTube 영상의 설명·챕터·자막/음성을 수집하는 중입니다...');
             const transcriptData = await fetchYouTubeTranscriptAuto(videoId, metadata);
 
-            const transcript = transcriptData.transcript.trim();
             const title = transcriptData.title || metadata.title;
             const channel = transcriptData.channel || metadata.author;
             const language = transcriptData.language || 'unknown';
@@ -850,18 +884,22 @@
                 'web-extract': '페이지 자동 추출'
             };
             const extractionLabel = extractionLabels[extractionMethod] || '자동 추출';
+            const chapters = ensureArray(transcriptData.chapters);
+            const description = toText(transcriptData.description, '');
+            const spokenText = toText(transcriptData.spokenText || transcriptData.transcript, '').trim();
 
             const lessonText = [
-                `[YouTube 영상]`,
+                `[YouTube 학습 소스]`,
                 `제목: ${title}`,
                 `채널: ${channel}`,
                 `URL: ${metadata.url}`,
-                `추출 방식: ${extractionLabel}`,
+                `수집 방식: ${extractionLabel}`,
                 `언어: ${language}`,
-                '',
-                '[영상 내용 전문]',
-                transcript
-            ].join('\n');
+                chapters.length ? `\n[챕터]\n${chapters.map(chapter => `${chapter.time} ${chapter.title}`).join('\n')}` : '',
+                description ? `\n[영상 설명]\n${description}` : '',
+                spokenText ? `\n[자막/발화 원문]\n${spokenText}` : '',
+                `\n[통합 원문 — AI 심층 분석용]\n${transcriptData.transcript.trim()}`
+            ].filter(Boolean).join('\n');
 
             return {
                 text: lessonText,
@@ -875,7 +913,10 @@
                     url: metadata.url,
                     channel,
                     language,
-                    extractionMethod
+                    extractionMethod,
+                    chapterCount: chapters.length,
+                    hasDescription: Boolean(description),
+                    hasTranscript: Boolean(spokenText)
                 }
             };
         }
@@ -965,16 +1006,232 @@
             alert("새 교재 등록을 취소하고 기존 교재를 유지합니다.");
         }
 
-        // 잔소리 확인 후 진짜로 리셋 & AI 요약 진행
-        async function confirmResetAndProcess() {
-            document.getElementById('closingModal').classList.add('hidden');
-            const key = apiKeyInput.value;
-            if (!key) {
-                hideLoading();
-                return alert("API 키를 확인하세요!");
+        function splitTextForAnalysis(text, maxLen = 10000) {
+            const normalized = String(text || '').trim();
+            if (normalized.length <= maxLen) return [normalized];
+
+            const chunks = [];
+            const paragraphs = normalized.split(/\n{2,}/);
+            let current = '';
+
+            for (const paragraph of paragraphs) {
+                const candidate = current ? `${current}\n\n${paragraph}` : paragraph;
+                if (candidate.length > maxLen && current) {
+                    chunks.push(current.trim());
+                    current = paragraph;
+                } else {
+                    current = candidate;
+                }
             }
-            saveIntegrationSettings();
-            
+
+            if (current.trim()) chunks.push(current.trim());
+            return chunks.length ? chunks : [normalized.slice(0, maxLen)];
+        }
+
+        const YOUTUBE_ANALYSIS_PROMPT = `당신은 YouTube 교육 영상을 완전 학습 커리큘럼으로 바꾸는 수석 교수설계자입니다.
+학생이 영상을 다시 보지 않아도, 영상에서 가르치는 모든 내용을 빠짐없이 학습할 수 있도록 심층 분석하세요.
+
+[절대 원칙]
+- 단순 자막 요약 금지. 영상이 가르치는 개념·절차·예시·주의점·실무 적용을 모두 구조화하세요.
+- 화자가 말하지 않았지만 영상 맥락상 필요한 배경지식도 짧게 보완하세요.
+- 챕터/설명/자막이 있으면 모두 반영하고, 중복은 통합하되 정보는 누락하지 마세요.
+- 기술·비즈니스·언어 학습 등 영상 주제가 무엇이든, 그 주제 자체를 완전히 이해할 수 있게 만드세요.
+
+[출력 규칙]
+- 반드시 JSON 객체만 출력. 마크다운 코드블록 금지.
+- studyGuide는 1500자 이상의 완전 학습 가이드(한국어). 영상 핵심을 처음부터 끝까지 서술.
+- sections는 영상의 모든 주요 파트를 빠짐없이 담고, 각 section의 keyPoints는 최소 3개 이상.
+
+[JSON 구조]
+{
+  "topic": "영상이 가르치는 핵심 주제",
+  "audience": "이 영상의 대상/난이도",
+  "learningOutcomes": ["영상 학습 후 달성할 결과"],
+  "prerequisites": ["선행 지식"],
+  "sections": [
+    {
+      "title": "파트 제목",
+      "summary": "이 파트 핵심",
+      "keyPoints": ["빠짐없는 핵심 포인트"],
+      "details": "충분히 풀어쓴 설명",
+      "examples": ["영상 속 예시/데모/사례"],
+      "steps": ["순서/절차가 있으면 단계별"],
+      "warnings": ["주의점/흔한 실수"]
+    }
+  ],
+  "terminology": [{ "term": "용어", "definition": "정의", "context": "왜 중요한지" }],
+  "actionItems": ["실천 과제"],
+  "reviewChecklist": ["스스로 점검할 항목"],
+  "studyGuide": "영상 전체를 커버하는 완전 학습 가이드"
+}`;
+
+        const YOUTUBE_LESSON_PROMPT = `당신은 YouTube 영상 심층 분석 결과를 바탕으로 완전 학습 슬라이드 패키지를 만드는 수석 교수설계자입니다.
+학생은 베트남인이지만, 영상이 가르치는 주제(기술/비즈니스/언어 등)를 완전히 마스터하는 것이 목표입니다.
+
+[절대 원칙]
+- 분석 결과의 모든 sections, terminology, actionItems를 슬라이드에 반영하세요. 요약으로 축소하지 마세요.
+- 슬라이드 12~18장. 주요 파트마다 최소 1장, 용어집·절차·비교·실습·복습 슬라이드 포함.
+- 영상을 보지 않아도 학습 가능하도록 bullets/examples/teacherNotes를 충분히 채우세요.
+- requiredQuizzes 8~12문항. 영상 전 구간을 골고루 검증.
+
+[슬라이드 필드]
+title, coreMessage, bullets, examples, visualType, visualElements, memoryHook, interactionPrompt, teacherNotes, activity
+
+[visualType]
+story-scene, comparison, process, mind-map, timeline, vocabulary-cards, role-play
+
+[퀴즈 규칙]
+q_vn/exp는 베트남어, options_korean_only는 한국어만.
+
+[JSON 구조]
+{
+  "summary": "학습 가이드 핵심 요약(한국어, 8~12줄)",
+  "deck": {
+    "title": "수업 제목",
+    "subtitle": "영상 기반 완전 학습",
+    "audience": "대상",
+    "estimatedMinutes": 30,
+    "objectives": ["학습 목표"],
+    "slides": []
+  },
+  "requiredQuizzes": []
+}`;
+
+        async function analyzeYouTubeSegment(segmentText, apiKey, sourceInfo, segmentMeta = null) {
+            const segmentLabel = segmentMeta
+                ? `이 입력은 전체 영상의 ${segmentMeta.index}/${segmentMeta.total} 구간입니다. 이 구간 내용만 빠짐없이 분석하세요.`
+                : '아래 YouTube 영상 소스를 심층 분석하세요.';
+
+            const data = await fetchGroqChatCompletion({
+                model: "llama-3.3-70b-versatile",
+                messages: [
+                    { role: "system", content: YOUTUBE_ANALYSIS_PROMPT },
+                    { role: "user", content: `${segmentLabel}\n\n영상: ${sourceInfo?.name || ''}\n채널: ${sourceInfo?.channel || ''}\n\n${segmentText}` }
+                ],
+                response_format: { type: "json_object" },
+                temperature: 0.25,
+                max_tokens: 8000
+            }, apiKey, { maxRetries: 2 });
+
+            return parseJsonResponse(data.choices[0].message.content);
+        }
+
+        async function mergeYouTubeAnalyses(analyses, apiKey, sourceInfo) {
+            const data = await fetchGroqChatCompletion({
+                model: "llama-3.3-70b-versatile",
+                messages: [
+                    { role: "system", content: `${YOUTUBE_ANALYSIS_PROMPT}\n\n여러 구간 분석 결과를 하나의 완전한 영상 학습 분석으로 통합하세요. 중복은 제거하되 정보 누락은 금지합니다.` },
+                    { role: "user", content: `영상: ${sourceInfo?.name || ''}\n\n구간별 분석 JSON:\n${JSON.stringify(analyses)}` }
+                ],
+                response_format: { type: "json_object" },
+                temperature: 0.2,
+                max_tokens: 8000
+            }, apiKey, { maxRetries: 2 });
+
+            return parseJsonResponse(data.choices[0].message.content);
+        }
+
+        async function runYouTubeDeepAnalysis(sourceText, apiKey, sourceInfo) {
+            const chunks = splitTextForAnalysis(sourceText, 10000);
+            let analysis;
+
+            if (chunks.length === 1) {
+                analysis = await analyzeYouTubeSegment(chunks[0], apiKey, sourceInfo);
+            } else {
+                const partials = [];
+                for (let i = 0; i < chunks.length; i++) {
+                    showLoading(`🧠 영상 내용 심층 분석 중... (${i + 1}/${chunks.length} 구간)`);
+                    partials.push(await analyzeYouTubeSegment(chunks[i], apiKey, sourceInfo, { index: i + 1, total: chunks.length }));
+                }
+                showLoading('🧩 전체 영상 분석 결과를 통합하는 중입니다...');
+                analysis = await mergeYouTubeAnalyses(partials, apiKey, sourceInfo);
+            }
+
+            if (!ensureArray(analysis.sections).length && !toText(analysis.studyGuide, '')) {
+                throw new Error('영상 내용 심층 분석에 실패했습니다. 잠시 후 다시 시도해주세요.');
+            }
+
+            return analysis;
+        }
+
+        async function generateYouTubeLessonFromAnalysis(analysis, apiKey) {
+            const data = await fetchGroqChatCompletion({
+                model: "llama-3.3-70b-versatile",
+                messages: [
+                    { role: "system", content: YOUTUBE_LESSON_PROMPT },
+                    { role: "user", content: `다음 YouTube 심층 분석 결과를 완전 학습 슬라이드 패키지로 변환하세요:\n${JSON.stringify(analysis)}` }
+                ],
+                response_format: { type: "json_object" },
+                temperature: 0.3,
+                max_tokens: 8000
+            }, apiKey, { maxRetries: 2 });
+
+            return parseJsonResponse(data.choices[0].message.content);
+        }
+
+        function buildYouTubeStudyMaterial(analysis, generatedSummary) {
+            const lines = [
+                `📺 ${toText(analysis.topic, 'YouTube 영상 학습')}`,
+                '',
+                '🎯 학습 성과',
+                ...ensureArray(analysis.learningOutcomes).map(item => `• ${item}`),
+                '',
+                '📖 완전 학습 가이드',
+                toText(analysis.studyGuide, generatedSummary)
+            ];
+
+            if (ensureArray(analysis.terminology).length) {
+                lines.push('', '📚 핵심 용어');
+                analysis.terminology.forEach(item => {
+                    lines.push(`• ${toText(item.term, '')}: ${toText(item.definition, '')}`);
+                });
+            }
+
+            if (ensureArray(analysis.reviewChecklist).length) {
+                lines.push('', '✅ 복습 체크리스트');
+                analysis.reviewChecklist.forEach(item => lines.push(`• ${item}`));
+            }
+
+            return lines.filter(Boolean).join('\n');
+        }
+
+        function finalizeLessonReset(generated, materialText) {
+            appState.material = materialText || generated.summary;
+            appState.slideDeck = generated.deck;
+            appState.requiredQuizPassed = false;
+            appState.sourceInfo = pendingNewSourceInfo;
+            appState.missedDays = 0;
+            appState.quizHistory = [];
+            appState.lastLoginDate = new Date().toDateString();
+            saveState();
+
+            hideLoading();
+            document.getElementById('naggingSection').classList.add('hidden');
+            document.getElementById('quizContainer').innerHTML = '';
+            pendingNewRawText = "";
+            pendingNewSourceInfo = null;
+
+            const isYoutube = appState.sourceInfo?.type === 'youtube';
+            alert(isYoutube
+                ? "✅ YouTube 영상이 심층 분석되어 완전 학습 슬라이드와 필수 퀴즈로 변환되었습니다!"
+                : "✅ 새 교재가 슬라이드 교육 자료와 필수 퀴즈로 변환되었습니다! 먼저 필수 체크퀴즈를 완료하세요.");
+            initApp();
+        }
+
+        async function processYouTubeDeepLearning(key) {
+            showLoading('🧠 1/3 YouTube 영상 전체 내용을 심층 분석하는 중입니다...');
+            const analysis = await runYouTubeDeepAnalysis(pendingNewRawText, key, pendingNewSourceInfo);
+
+            showLoading('📚 2/3 분석 결과를 완전 학습 슬라이드로 설계하는 중입니다...');
+            const lessonJson = await generateYouTubeLessonFromAnalysis(analysis, key);
+            const generated = normalizeGeneratedLesson(lessonJson, { maxSlides: 18, maxQuizzes: 12, minSlides: 6 });
+
+            showLoading('✅ 3/3 학습 패키지를 마무리하는 중입니다...');
+            const materialText = buildYouTubeStudyMaterial(analysis, generated.summary);
+            finalizeLessonReset(generated, materialText);
+        }
+
+        async function processStandardLesson(key) {
             showLoading("🤖 교재를 수업용 슬라이드와 필수 퀴즈로 설계 중입니다...");
 
             const materialForAI = prepareMaterialForAI(pendingNewRawText);
@@ -1042,29 +1299,31 @@
 
                 const json = parseJsonResponse(data.choices[0].message.content);
                 const generated = normalizeGeneratedLesson(json);
-                
-                // --- 진짜 리셋 ---
-                appState.material = generated.summary;
-                appState.slideDeck = generated.deck;
-                appState.requiredQuizPassed = false;
-                appState.sourceInfo = pendingNewSourceInfo;
-                appState.missedDays = 0;
-                appState.quizHistory = [];
-                appState.lastLoginDate = new Date().toDateString();
-                saveState();
-                
-                hideLoading();
-                document.getElementById('naggingSection').classList.add('hidden'); // 기존 잔소리 숨김
-                document.getElementById('quizContainer').innerHTML = ''; // 기존 퀴즈 날림
-                pendingNewRawText = "";
-                pendingNewSourceInfo = null;
-                
-                alert("✅ 새 교재가 슬라이드 교육 자료와 필수 퀴즈로 변환되었습니다! 먼저 필수 체크퀴즈를 완료하세요.");
-                initApp(); 
-
+                finalizeLessonReset(generated, generated.summary);
             } catch (err) {
                 hideLoading();
                 alert(err.message || "새 교재 분석 중 오류가 발생했습니다. API 키, 자료 길이, 추출 텍스트 품질을 확인해주세요.");
+            }
+        }
+
+        async function confirmResetAndProcess() {
+            document.getElementById('closingModal').classList.add('hidden');
+            const key = apiKeyInput.value;
+            if (!key) {
+                hideLoading();
+                return alert("API 키를 확인하세요!");
+            }
+            saveIntegrationSettings();
+
+            try {
+                if (pendingNewSourceInfo?.type === 'youtube') {
+                    await processYouTubeDeepLearning(key);
+                } else {
+                    await processStandardLesson(key);
+                }
+            } catch (err) {
+                hideLoading();
+                alert(err.message || "학습 자료 생성 중 오류가 발생했습니다.");
             }
         }
 
@@ -1086,9 +1345,9 @@
             return JSON.parse(cleaned);
         }
 
-        function normalizeGeneratedLesson(json) {
+        function normalizeGeneratedLesson(json, { maxSlides = 10, maxQuizzes = 8, minSlides = 1 } = {}) {
             const deck = json.deck || {};
-            const slides = ensureArray(deck.slides).slice(0, 10).map((slide, idx) => ({
+            const slides = ensureArray(deck.slides).slice(0, maxSlides).map((slide, idx) => ({
                 title: toText((slide || {}).title, `슬라이드 ${idx + 1}`),
                 coreMessage: toText((slide || {}).coreMessage, ""),
                 bullets: ensureArray((slide || {}).bullets).slice(0, 5).map(item => toText(item, "")).filter(Boolean),
@@ -1101,9 +1360,11 @@
                 activity: toText((slide || {}).activity, "")
             })).filter(slide => slide.title || slide.bullets.length || slide.examples.length);
 
-            if (slides.length === 0) throw new Error("슬라이드 생성 실패");
+            if (slides.length < minSlides) {
+                throw new Error(minSlides > 1 ? "YouTube 학습 슬라이드 생성이 불완전합니다. 잠시 후 다시 시도해주세요." : "슬라이드 생성 실패");
+            }
 
-            const requiredQuizzes = ensureArray(json.requiredQuizzes || deck.requiredQuizzes).slice(0, 8).map((quiz, idx) => ({
+            const requiredQuizzes = ensureArray(json.requiredQuizzes || deck.requiredQuizzes).slice(0, maxQuizzes).map((quiz, idx) => ({
                 slideIndex: Number.isInteger((quiz || {}).slideIndex) ? quiz.slideIndex : Math.min(idx + 1, slides.length),
                 q_vn: toText((quiz || {}).q_vn, `Câu ${idx + 1}`),
                 options_korean_only: ensureArray((quiz || {}).options_korean_only).slice(0, 4).map(item => toText(item, "")).filter(Boolean),
@@ -1221,7 +1482,7 @@
             meta.push(`⏱️ ${deck.estimatedMinutes || 20}분`);
             meta.push(`🧑‍🎓 ${deck.audience || "베트남인 한국어 학습자"}`);
             meta.push("🎨 비주얼 학습");
-            if (appState.sourceInfo?.type === 'youtube') meta.push('▶️ YouTube');
+            if (appState.sourceInfo?.type === 'youtube') meta.push('▶️ YouTube 심층 학습');
             if (appState.sourceInfo?.extractionMethod === 'speech') meta.push('🎙️ 음성 인식');
             if (appState.sourceInfo?.extractionMethod === 'web-extract') meta.push('🌐 자동 추출');
             if (appState.sourceInfo && appState.sourceInfo.name) meta.push(`📎 ${appState.sourceInfo.name}`);
