@@ -203,7 +203,7 @@
                         </div>
                     </div>
                     <p class="text-slate-300 text-sm md:text-base leading-relaxed max-w-2xl">
-                        교재, PDF, 스크린샷을 AI가 분석해 비주얼 슬라이드·학습 활동·필수 퀴즈까지 한 번에 구성하는 전문 교육 콘텐츠 제작 도구입니다.
+                        교재, PDF, 스크린샷, YouTube 영상을 AI가 분석해 비주얼 슬라이드·학습 활동·필수 퀴즈까지 한 번에 구성하는 전문 교육 콘텐츠 제작 도구입니다.
                     </p>
                 </div>
                 <div class="grid grid-cols-3 gap-2 text-center">
@@ -306,9 +306,10 @@
                 </div>
             </summary>
             
-            <div class="border-t border-slate-700/70 text-sm grid grid-cols-2 gap-2 p-3">
+            <div class="border-t border-slate-700/70 text-sm grid grid-cols-3 gap-2 p-3">
                 <button onclick="switchTab('text')" id="tab-text" class="tab-btn active rounded-xl py-3 text-center text-slate-400 hover:text-white transition border border-transparent">📝 텍스트</button>
                 <button onclick="switchTab('file')" id="tab-file" class="tab-btn rounded-xl py-3 text-center text-slate-400 hover:text-white transition border border-transparent">📸 사진/파일</button>
+                <button onclick="switchTab('youtube')" id="tab-youtube" class="tab-btn rounded-xl py-3 text-center text-slate-400 hover:text-white transition border border-transparent">▶️ YouTube</button>
             </div>
             
             <div class="p-4 pt-1 md:p-5 md:pt-2">
@@ -327,6 +328,17 @@
                         <input type="file" id="fileInput" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.json" capture="environment" class="hidden">
                     </label>
                 </div>
+
+                <div id="input-youtube" class="hidden space-y-4">
+                    <div class="upload-drop p-6 rounded-3xl">
+                        <span class="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-rose-400/10 border border-rose-300/20 text-3xl mb-3">▶️</span>
+                        <p class="text-sm font-black text-white text-center">YouTube 링크를 슬라이드 수업 자료로 변환</p>
+                        <p class="text-xs text-slate-400 text-center mt-2">영상 자막을 추출해 핵심 개념, 비주얼 슬라이드, 필수 퀴즈를 생성합니다.</p>
+                    </div>
+                    <input type="url" id="youtubeUrl" placeholder="https://www.youtube.com/watch?v=..." class="w-full professional-input rounded-2xl p-4 text-sm text-slate-200 placeholder:text-slate-500">
+                    <button onclick="processInput('youtube')" class="w-full primary-action p-3 rounded-2xl font-black text-sm text-white">YouTube 영상 → 슬라이드 자료 만들기</button>
+                    <p class="text-[11px] text-slate-500 leading-relaxed">자막이 없는 영상은 변환되지 않습니다. 브라우저에서 자막 추출이 막히면 Settings에 Transcript Proxy URL을 입력하거나 `node youtube-transcript-proxy.mjs`를 실행하세요.</p>
+                </div>
             </div>
         </details>
 
@@ -334,6 +346,7 @@
             <summary class="p-4 text-xs text-slate-400 cursor-pointer font-bold">⚙️ API Settings & Dev Tools</summary>
             <div class="p-4 pt-0 space-y-3">
                 <input type="password" id="apiKey" placeholder="Groq API Key" class="w-full professional-input rounded-xl p-3 text-sm text-slate-200">
+                <input type="url" id="transcriptProxyUrl" placeholder="YouTube Transcript Proxy URL (예: http://localhost:8787/transcript)" class="w-full professional-input rounded-xl p-3 text-sm text-slate-200">
                 <button onclick="simulateNextDay()" class="w-full secondary-action p-2 rounded-xl text-xs text-slate-300 transition">[테스트용] +1일 타임머신 (하루 결석 처리)</button>
             </div>
         </details>
@@ -398,6 +411,7 @@
         appState.sourceInfo = appState.sourceInfo || null;
 
         const apiKeyInput = document.getElementById('apiKey');
+        const transcriptProxyInput = document.getElementById('transcriptProxyUrl');
         const penaltyCountEl = document.getElementById('penaltyCount');
         const btnQuizCountEl = document.getElementById('btnQuizCount');
         const reportBtn = document.getElementById('reportBtn');
@@ -415,14 +429,16 @@
         function switchTab(tabId) {
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active', 'text-white'));
             document.getElementById(`tab-${tabId}`).classList.add('active', 'text-white');
-            document.getElementById('input-text').classList.add('hidden');
-            document.getElementById('input-file').classList.add('hidden');
+            ['text', 'file', 'youtube'].forEach(name => {
+                document.getElementById(`input-${name}`).classList.add('hidden');
+            });
             document.getElementById(`input-${tabId}`).classList.remove('hidden');
         }
 
         // --- 초기화 로직 ---
         function initApp() {
             apiKeyInput.value = localStorage.getItem('groq_key') || '';
+            transcriptProxyInput.value = localStorage.getItem('transcript_proxy_url') || getDefaultTranscriptProxyUrl();
             const today = new Date().toDateString();
             
             if (appState.material && appState.lastLoginDate !== today) {
@@ -573,10 +589,152 @@
             return result.data.text;
         }
 
-        function processInput(type) {
-            if(type === 'text') {
+        function getDefaultTranscriptProxyUrl() {
+            const host = window.location.hostname;
+            if (host === 'localhost' || host === '127.0.0.1') {
+                return 'http://localhost:8787/transcript';
+            }
+            if (host && !host.endsWith('.github.io')) {
+                return `${window.location.origin}/api/youtube-transcript`;
+            }
+            return '';
+        }
+
+        function getTranscriptProxyCandidates() {
+            const configured = transcriptProxyInput.value.trim() || localStorage.getItem('transcript_proxy_url') || '';
+            const defaults = [
+                configured,
+                getDefaultTranscriptProxyUrl(),
+                `${window.location.origin}/api/youtube-transcript`,
+                'http://localhost:8787/transcript'
+            ];
+            return [...new Set(defaults.filter(Boolean))];
+        }
+
+        function saveIntegrationSettings() {
+            localStorage.setItem('groq_key', apiKeyInput.value.trim());
+            localStorage.setItem('transcript_proxy_url', transcriptProxyInput.value.trim());
+        }
+
+        function parseYouTubeVideoId(input) {
+            const value = String(input || '').trim();
+            if (!value) return null;
+            if (/^[a-zA-Z0-9_-]{11}$/.test(value)) return value;
+
+            const patterns = [
+                /(?:youtube\.com\/watch\?v=|youtube\.com\/watch\?.*&v=)([a-zA-Z0-9_-]{11})/,
+                /youtu\.be\/([a-zA-Z0-9_-]{11})/,
+                /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,
+                /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/
+            ];
+
+            for (const pattern of patterns) {
+                const match = value.match(pattern);
+                if (match) return match[1];
+            }
+            return null;
+        }
+
+        function decodeXmlEntities(value) {
+            return String(value || '')
+                .replace(/&amp;/g, '&')
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&#39;/g, "'")
+                .replace(/&quot;/g, '"')
+                .replace(/\n/g, ' ')
+                .trim();
+        }
+
+        function parseCaptionXml(xml) {
+            const textMatches = [...xml.matchAll(/<text[^>]*>([\s\S]*?)<\/text>/g)].map(match => decodeXmlEntities(match[1]));
+            if (textMatches.length) return textMatches.join(' ');
+
+            const paragraphMatches = [...xml.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/g)].map(match => decodeXmlEntities(match[1]));
+            return paragraphMatches.join(' ');
+        }
+
+        async function fetchYouTubeMetadata(videoId) {
+            const res = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}`);
+            if (!res.ok) throw new Error('YouTube metadata fetch failed');
+            const data = await res.json();
+            return {
+                title: data.title || `YouTube ${videoId}`,
+                author: data.author_name || '',
+                url: data.url || `https://www.youtube.com/watch?v=${videoId}`,
+                thumbnail: data.thumbnail_url || ''
+            };
+        }
+
+        async function fetchYouTubeTranscriptViaProxy(videoId) {
+            const candidates = getTranscriptProxyCandidates();
+            let lastError = null;
+
+            for (const baseUrl of candidates) {
+                try {
+                    const endpoint = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}videoId=${encodeURIComponent(videoId)}`;
+                    const res = await fetch(endpoint);
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || `Proxy failed (${res.status})`);
+                    if (!data.transcript || data.transcript.trim().length < 20) {
+                        throw new Error('Proxy returned empty transcript');
+                    }
+                    return data;
+                } catch (error) {
+                    lastError = error;
+                }
+            }
+
+            throw lastError || new Error('Transcript proxy unavailable');
+        }
+
+        async function fetchYouTubeLessonText(url) {
+            const videoId = parseYouTubeVideoId(url);
+            if (!videoId) throw new Error('유효한 YouTube 링크가 아닙니다.');
+
+            saveIntegrationSettings();
+            showLoading('▶️ YouTube 영상 정보를 확인하는 중입니다...');
+            const metadata = await fetchYouTubeMetadata(videoId);
+
+            showLoading('📝 YouTube 자막을 추출하는 중입니다...');
+            const transcriptData = await fetchYouTubeTranscriptViaProxy(videoId);
+
+            const transcript = transcriptData.transcript.trim();
+            const title = transcriptData.title || metadata.title;
+            const channel = transcriptData.channel || metadata.author;
+            const language = transcriptData.language || 'unknown';
+
+            const lessonText = [
+                `[YouTube 영상]`,
+                `제목: ${title}`,
+                `채널: ${channel}`,
+                `URL: ${metadata.url}`,
+                `자막 언어: ${language}`,
+                '',
+                '[영상 자막 전문]',
+                transcript
+            ].join('\n');
+
+            return {
+                text: lessonText,
+                sourceInfo: {
+                    name: title,
+                    type: 'youtube',
+                    extractedAt: new Date().toISOString(),
+                    pages: null,
+                    chars: lessonText.length,
+                    videoId,
+                    url: metadata.url,
+                    channel,
+                    language
+                }
+            };
+        }
+
+        async function processInput(type) {
+            if (type === 'text') {
                 const text = document.getElementById('textContent').value;
-                if(!text.trim()) return alert("내용을 입력해주세요!");
+                if (!text.trim()) return alert("내용을 입력해주세요!");
                 checkResetCondition(text, {
                     name: "직접 입력",
                     type: "text",
@@ -584,6 +742,21 @@
                     pages: null,
                     chars: text.trim().length
                 });
+                return;
+            }
+
+            if (type === 'youtube') {
+                const url = document.getElementById('youtubeUrl').value.trim();
+                if (!url) return alert('YouTube 링크를 입력해주세요!');
+
+                try {
+                    const extracted = await fetchYouTubeLessonText(url);
+                    if (extracted.text.trim().length < 20) throw new Error('자막이 너무 짧습니다.');
+                    checkResetCondition(extracted.text, extracted.sourceInfo);
+                } catch (error) {
+                    hideLoading();
+                    alert(`YouTube 변환 오류: ${error.message}\n\n자막이 있는 영상인지 확인하고, Settings에 Transcript Proxy URL을 설정하거나 로컬에서 node youtube-transcript-proxy.mjs 를 실행해 주세요.`);
+                }
             }
         }
 
@@ -604,8 +777,8 @@
                 hideLoading();
                 return alert("API 키를 확인하세요!");
             }
-            localStorage.setItem('groq_key', key);
-
+            saveIntegrationSettings();
+            
             showLoading("👨‍🏫 새 교재로 넘어가기 전, 이전 학습을 평가 중입니다...");
             
             const historyText = appState.quizHistory.map(h => `- ${h.date}: ${h.total}문제 중 ${h.score}개 정답`).join('\n');
@@ -654,13 +827,13 @@
                 hideLoading();
                 return alert("API 키를 확인하세요!");
             }
-            localStorage.setItem('groq_key', key);
+            saveIntegrationSettings();
             
             showLoading("🤖 교재를 수업용 슬라이드와 필수 퀴즈로 설계 중입니다...");
 
             const materialForAI = prepareMaterialForAI(pendingNewRawText);
             const systemPrompt = `당신은 한국어 교육 자료를 만드는 수석 교수설계자입니다. 학생은 베트남인 한국어 학습자입니다.
-업로드된 교과서, 스크린샷, PDF, 필기, 표 자료의 OCR 오타와 줄바꿈을 정리해서 바로 수업에 쓸 수 있는 완성형 슬라이드 교육 자료를 만드세요.
+업로드된 교과서, 스크린샷, PDF, YouTube 자막, 필기, 표 자료의 OCR 오타와 줄바꿈을 정리해서 바로 수업에 쓸 수 있는 완성형 슬라이드 교육 자료를 만드세요.
 
 [출력 규칙]
 - 반드시 JSON 객체만 출력하세요. 마크다운 코드블록, 설명문, 주석 금지.
@@ -909,7 +1082,9 @@
             meta.push(`⏱️ ${deck.estimatedMinutes || 20}분`);
             meta.push(`🧑‍🎓 ${deck.audience || "베트남인 한국어 학습자"}`);
             meta.push("🎨 비주얼 학습");
+            if (appState.sourceInfo?.type === 'youtube') meta.push('▶️ YouTube');
             if (appState.sourceInfo && appState.sourceInfo.name) meta.push(`📎 ${appState.sourceInfo.name}`);
+            if (appState.sourceInfo?.language) meta.push(`🌐 ${appState.sourceInfo.language}`);
             document.getElementById('deckMeta').innerHTML = meta.map(item => `<span class="bg-slate-950/60 border border-slate-700/80 rounded-full px-2 py-1">${escapeHtml(item)}</span>`).join('');
 
             const objectives = ensureArray(deck.objectives);
