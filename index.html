@@ -601,17 +601,21 @@
             return path === '/' ? '' : path;
         }
 
+        function isGitHubPagesHost() {
+            return window.location.hostname.endsWith('.github.io');
+        }
+
         function getTranscriptApiEndpoints() {
             const endpoints = [];
             const basePath = getAppBasePath();
 
             if (window.location.protocol === 'file:') {
                 endpoints.push('http://localhost:3000/api/youtube-transcript');
-            } else {
+            } else if (!isGitHubPagesHost()) {
                 endpoints.push(`${window.location.origin}${basePath}/api/youtube-transcript`);
             }
 
-            if (window.location.hostname.endsWith('.github.io')) {
+            if (isGitHubPagesHost()) {
                 endpoints.push(...PUBLIC_TRANSCRIPT_APIS);
             }
 
@@ -729,9 +733,7 @@
             };
         }
 
-        async function fetchYouTubeTranscriptAuto(videoId, metadata) {
-            const groqKey = apiKeyInput.value.trim();
-            const endpoints = getTranscriptApiEndpoints();
+        async function fetchYouTubeTranscriptViaApi(endpoints, videoId, groqKey) {
             let lastError = null;
 
             for (const baseUrl of endpoints) {
@@ -752,11 +754,44 @@
                 }
             }
 
-            try {
-                showLoading('🌐 YouTube 페이지에서 자막·설명을 자동 추출하는 중입니다...');
-                return await fetchYouTubeViaJina(videoId, metadata);
-            } catch (error) {
-                lastError = error;
+            if (lastError) throw lastError;
+            return null;
+        }
+
+        async function fetchYouTubeTranscriptAuto(videoId, metadata) {
+            const groqKey = apiKeyInput.value.trim();
+            const endpoints = getTranscriptApiEndpoints();
+            let lastError = null;
+
+            if (isGitHubPagesHost()) {
+                try {
+                    showLoading('🌐 YouTube 페이지에서 자막·설명을 자동 추출하는 중입니다...');
+                    return await fetchYouTubeViaJina(videoId, metadata);
+                } catch (error) {
+                    lastError = error;
+                }
+
+                try {
+                    showLoading('🎙️ 자막이 없는 영상 — 음성 인식으로 변환을 시도합니다...');
+                    const apiResult = await fetchYouTubeTranscriptViaApi(endpoints, videoId, groqKey);
+                    if (apiResult) return apiResult;
+                } catch (error) {
+                    lastError = error;
+                }
+            } else {
+                try {
+                    const apiResult = await fetchYouTubeTranscriptViaApi(endpoints, videoId, groqKey);
+                    if (apiResult) return apiResult;
+                } catch (error) {
+                    lastError = error;
+                }
+
+                try {
+                    showLoading('🌐 YouTube 페이지에서 자막·설명을 자동 추출하는 중입니다...');
+                    return await fetchYouTubeViaJina(videoId, metadata);
+                } catch (error) {
+                    lastError = error;
+                }
             }
 
             if (window.location.protocol === 'file:') {
