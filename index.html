@@ -337,7 +337,7 @@
                     </div>
                     <input type="url" id="youtubeUrl" placeholder="https://www.youtube.com/watch?v=..." class="w-full professional-input rounded-2xl p-4 text-sm text-slate-200 placeholder:text-slate-500">
                     <button onclick="processInput('youtube')" class="w-full primary-action p-3 rounded-2xl font-black text-sm text-white">YouTube 영상 → 슬라이드 자료 만들기</button>
-                    <p class="text-[11px] text-slate-500 leading-relaxed">자막이 없어도 Groq API Key가 있으면 자동 음성 인식으로 변환합니다. 로컬에서는 `node youtube-transcript-proxy.mjs` 실행 후 Transcript Proxy URL을 `http://localhost:8787/transcript`로 두세요.</p>
+                    <p class="text-[11px] text-slate-500 leading-relaxed">링크만 넣으면 됩니다. 자막이 없어도 Groq API Key로 자동 음성 인식합니다.</p>
                 </div>
             </div>
         </details>
@@ -346,7 +346,6 @@
             <summary class="p-4 text-xs text-slate-400 cursor-pointer font-bold">⚙️ API Settings & Dev Tools</summary>
             <div class="p-4 pt-0 space-y-3">
                 <input type="password" id="apiKey" placeholder="Groq API Key" class="w-full professional-input rounded-xl p-3 text-sm text-slate-200">
-                <input type="url" id="transcriptProxyUrl" placeholder="YouTube Transcript Proxy URL (예: http://localhost:8787/transcript)" class="w-full professional-input rounded-xl p-3 text-sm text-slate-200">
                 <button onclick="simulateNextDay()" class="w-full secondary-action p-2 rounded-xl text-xs text-slate-300 transition">[테스트용] +1일 타임머신 (하루 결석 처리)</button>
             </div>
         </details>
@@ -411,7 +410,6 @@
         appState.sourceInfo = appState.sourceInfo || null;
 
         const apiKeyInput = document.getElementById('apiKey');
-        const transcriptProxyInput = document.getElementById('transcriptProxyUrl');
         const penaltyCountEl = document.getElementById('penaltyCount');
         const btnQuizCountEl = document.getElementById('btnQuizCount');
         const reportBtn = document.getElementById('reportBtn');
@@ -438,7 +436,6 @@
         // --- 초기화 로직 ---
         function initApp() {
             apiKeyInput.value = localStorage.getItem('groq_key') || '';
-            transcriptProxyInput.value = localStorage.getItem('transcript_proxy_url') || getDefaultTranscriptProxyUrl();
             const today = new Date().toDateString();
             
             if (appState.material && appState.lastLoginDate !== today) {
@@ -589,31 +586,28 @@
             return result.data.text;
         }
 
-        function getDefaultTranscriptProxyUrl() {
-            const host = window.location.hostname;
-            if (host === 'localhost' || host === '127.0.0.1') {
-                return 'http://localhost:8787/transcript';
-            }
-            if (host && !host.endsWith('.github.io')) {
-                return `${window.location.origin}/api/youtube-transcript`;
-            }
-            return '';
-        }
+        const PUBLIC_TRANSCRIPT_APIS = [
+            'https://ai-teacher-assistant.vercel.app/api/youtube-transcript'
+        ];
 
-        function getTranscriptProxyCandidates() {
-            const configured = transcriptProxyInput.value.trim() || localStorage.getItem('transcript_proxy_url') || '';
-            const defaults = [
-                configured,
-                getDefaultTranscriptProxyUrl(),
-                `${window.location.origin}/api/youtube-transcript`,
-                'http://localhost:8787/transcript'
-            ];
-            return [...new Set(defaults.filter(Boolean))];
+        function getTranscriptApiEndpoints() {
+            const endpoints = [];
+
+            if (window.location.protocol !== 'file:') {
+                endpoints.push(`${window.location.origin}/api/youtube-transcript`);
+            } else {
+                endpoints.push('http://localhost:3000/api/youtube-transcript');
+            }
+
+            if (window.location.hostname.endsWith('.github.io')) {
+                endpoints.push(...PUBLIC_TRANSCRIPT_APIS);
+            }
+
+            return [...new Set(endpoints)];
         }
 
         function saveIntegrationSettings() {
             localStorage.setItem('groq_key', apiKeyInput.value.trim());
-            localStorage.setItem('transcript_proxy_url', transcriptProxyInput.value.trim());
         }
 
         function parseYouTubeVideoId(input) {
@@ -666,25 +660,25 @@
             };
         }
 
-        async function fetchYouTubeTranscriptViaProxy(videoId) {
+        async function fetchYouTubeTranscriptAuto(videoId) {
             const groqKey = apiKeyInput.value.trim();
             if (!groqKey) {
-                throw new Error('Groq API Key가 필요합니다. 자막이 없는 영상은 음성 인식으로 추출합니다.');
+                throw new Error('Settings에 Groq API Key를 입력해주세요.');
             }
 
-            const candidates = getTranscriptProxyCandidates();
+            const endpoints = getTranscriptApiEndpoints();
             let lastError = null;
 
-            for (const baseUrl of candidates) {
+            for (const baseUrl of endpoints) {
                 try {
-                    const endpoint = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}videoId=${encodeURIComponent(videoId)}`;
+                    const endpoint = `${baseUrl}?videoId=${encodeURIComponent(videoId)}`;
                     const res = await fetch(endpoint, {
                         headers: { 'X-Groq-Api-Key': groqKey }
                     });
-                    const data = await res.json();
-                    if (!res.ok) throw new Error(data.error || `Proxy failed (${res.status})`);
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok) throw new Error(data.error || 'YouTube 영상 내용을 가져오지 못했습니다.');
                     if (!data.transcript || data.transcript.trim().length < 20) {
-                        throw new Error('Proxy returned empty transcript');
+                        throw new Error('영상에서 충분한 내용을 추출하지 못했습니다.');
                     }
                     return data;
                 } catch (error) {
@@ -692,7 +686,11 @@
                 }
             }
 
-            throw lastError || new Error('Transcript proxy unavailable');
+            if (window.location.protocol === 'file:') {
+                throw new Error('YouTube 분석은 웹 주소로 접속했을 때 자동으로 동작합니다. 배포된 앱 주소로 열어주세요.');
+            }
+
+            throw lastError || new Error('YouTube 분석 서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.');
         }
 
         async function fetchYouTubeLessonText(url) {
@@ -704,7 +702,7 @@
             const metadata = await fetchYouTubeMetadata(videoId);
 
             showLoading('📝 YouTube 자막/음성을 추출하는 중입니다...');
-            const transcriptData = await fetchYouTubeTranscriptViaProxy(videoId);
+            const transcriptData = await fetchYouTubeTranscriptAuto(videoId);
 
             const transcript = transcriptData.transcript.trim();
             const title = transcriptData.title || metadata.title;
@@ -766,7 +764,7 @@
                     checkResetCondition(extracted.text, extracted.sourceInfo);
                 } catch (error) {
                     hideLoading();
-                    alert(`YouTube 변환 오류: ${error.message}\n\nGroq API Key, Transcript Proxy URL을 확인하고 로컬에서는 node youtube-transcript-proxy.mjs 를 실행해 주세요.`);
+                    alert(`YouTube 변환 오류: ${error.message}`);
                 }
             }
         }

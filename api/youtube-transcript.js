@@ -206,7 +206,7 @@ function getGroqApiKey(req) {
     return String(headerKey || queryKey || '').trim();
 }
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
     if (req.method === 'OPTIONS') {
         return sendJson(res, 204, {});
     }
