@@ -11,7 +11,11 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    await handler({ method: req.method, query: Object.fromEntries(url.searchParams) }, res);
+    await handler({
+        method: req.method,
+        query: Object.fromEntries(url.searchParams),
+        headers: req.headers
+    }, res);
 });
 
 server.listen(PORT, () => {
